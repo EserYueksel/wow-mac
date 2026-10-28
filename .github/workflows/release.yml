@@ -1,7 +1,9 @@
 name: Release-App bauen
+# Läuft, sobald auf GitHub ein Release veröffentlicht wird: baut "WoW-Mac Installer.app"
+# (mit den Installer-Dateien im Bundle) und hängt sie als ZIP an das Release.
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
 permissions:
   contents: write
 jobs:
@@ -9,15 +11,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Skripte prüfen
+        run: for f in install.sh installer/wowmac.sh installer/lib/*.sh installer/build-installer-app.sh; do /bin/bash -n "$f"; done
       - name: App bauen
         run: |
           mkdir -p dist
           bash installer/build-installer-app.sh "$PWD/dist" --bundle
           cd dist && ditto -c -k --keepParent "WoW-Mac Installer.app" WoW-Mac-Installer.zip
-      - name: Release veroeffentlichen
+      - name: An das Release anhängen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" dist/WoW-Mac-Installer.zip --title "WoW-Mac $GITHUB_REF_NAME" \
-            --notes "Installer-App zum Herunterladen. Einfacher: Terminal-Zeile aus der README." \
-          || gh release upload "$GITHUB_REF_NAME" dist/WoW-Mac-Installer.zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/WoW-Mac-Installer.zip --clobber
