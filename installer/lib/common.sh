@@ -1,7 +1,7 @@
 #!/bin/bash
 # common.sh – gemeinsame Werte und Hilfsfunktionen des WoW-Mac-Installers (macOS, /bin/bash 3.2).
 
-WOWMAC_VERSION="1.0.0"
+WOWMAC_VERSION="1.1.0"
 
 # ---- feste, getestete Versionen (Prüfsummen von den offiziellen Release-Seiten) ----
 UTM_MIN_VERSION="5.0.0"
@@ -30,6 +30,7 @@ UTM_PREFS="$HOME/Library/Containers/com.utmapp.UTM/Data/Library/Preferences/com.
 STARTER_ID="io.github.wowmac.starter"
 UNINSTALLER_ID="io.github.wowmac.uninstaller"
 UNINSTALLER_NAME="WoW-Mac deinstallieren"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 GUI=0
 TOTAL_STEPS=10
@@ -126,4 +127,26 @@ repeat with i from 3 to count of argv
 end repeat
 execute of virtual machine named (item 1 of argv) at (item 2 of argv) with arguments args
 return "ok"' "$vm" "$prog" "$@" >/dev/null 2>&1
+}
+# guest_put VM MACDATEI GASTPFAD – legt eine kleine Datei im Gast ab (root, ausführbar) und prüft sie byte-genau
+guest_put() {
+  local vm=$1 src=$2 dst=$3 b t i
+  b=$(base64 < "$src" | tr -d '\n')
+  guest_exec "$vm" /bin/sh -c 'printf "%s" "$1" | base64 -d > "$2.neu" && chmod 755 "$2.neu" && mv -f "$2.neu" "$2"' sh "$b" "$dst" || return 1
+  t=$(mktemp /tmp/wowmac-put.XXXXXX) || return 1
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    if guest_fetch "$vm" "$dst" "$t" && cmp -s "$t" "$src"; then rm -f "$t"; return 0; fi
+  done
+  rm -f "$t"; return 1
+}
+# guest_wow_running VM – 0 = WoW läuft in der VM, 1 = läuft nicht, 2 = unbekannt (Gastagent antwortet nicht)
+guest_wow_running() {
+  local i r f="/run/wowmac-wow-$$-$(date +%s)"
+  guest_exec "$1" /bin/sh -c 'if pgrep -fi "wow\.exe" >/dev/null; then echo ja; else echo nein; fi > "$1"' sh "$f" || return 2
+  for i in 1 2 3 4 5 6 7 8; do
+    sleep 1; r=$(guest_read "$1" "$f")
+    case "$r" in ja*) return 0;; nein*) return 1;; esac
+  done
+  return 2
 }
