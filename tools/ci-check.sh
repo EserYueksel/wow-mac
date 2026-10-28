@@ -11,7 +11,14 @@ T=$(mktemp -d)
 cat installer/apps/installer.applescript installer/apps/progress.applescript.inc > "$T/i.applescript"
 cat installer/apps/uninstaller.applescript installer/apps/progress.applescript.inc > "$T/u.applescript"
 sed -e 's/__VMNAME__/WoW-Linux/g' -e 's/__APPNAME__/WoW Test/g' -e 's/__SCALE__/1/g' installer/apps/starter.applescript > "$T/s.applescript"
-HAVE_UTM=0; open -Ra UTM 2>/dev/null && HAVE_UTM=1
+# UTM finden; frisch per brew installiert ist es dem System (LaunchServices) noch nicht bekannt -> anmelden
+HAVE_UTM=0
+for U in /Applications/UTM.app "$HOME/Applications/UTM.app"; do
+  if [ -d "$U" ]; then
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$U" 2>/dev/null || true
+    HAVE_UTM=1; echo "UTM gefunden: $U"; break
+  fi
+done
 for f in "$T"/*.applescript; do
   xattr -w com.apple.TextEncoding "utf-8;134217984" "$f" 2>/dev/null || true
   if [ "$(basename "$f")" = s.applescript ] && [ "$HAVE_UTM" = 0 ]; then echo "UTM fehlt – Starter wird nicht uebersetzt"; continue; fi
