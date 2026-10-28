@@ -1,0 +1,11 @@
+name: Pruefen
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: UTM fuer die AppleScript-Pruefung installieren
+        run: brew install --cask utm
+      - name: Skripte pruefen
+        run: bash tools/ci-check.sh

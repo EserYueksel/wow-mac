@@ -1,0 +1,23 @@
+name: Release-App bauen
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: App bauen
+        run: |
+          mkdir -p dist
+          bash installer/build-installer-app.sh "$PWD/dist" --bundle
+          cd dist && ditto -c -k --keepParent "WoW-Mac Installer.app" WoW-Mac-Installer.zip
+      - name: Release veroeffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/WoW-Mac-Installer.zip --title "WoW-Mac $GITHUB_REF_NAME" \
+            --notes "Installer-App zum Herunterladen. Einfacher: Terminal-Zeile aus der README." \
+          || gh release upload "$GITHUB_REF_NAME" dist/WoW-Mac-Installer.zip --clobber
