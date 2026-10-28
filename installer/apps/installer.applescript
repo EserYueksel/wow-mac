@@ -21,9 +21,15 @@ on run
 
 	-- schon eingerichtet?
 	if my val(pf, "INSTALLED") is "1" then
-		set b to button returned of (display dialog "WoW-Mac ist auf diesem Mac schon eingerichtet." & return & return & "„Reparieren“ wiederholt die Einrichtung in der Linux-VM (z. B. nach Problemen). Spielstand und Einstellungen bleiben erhalten." buttons {"Abbrechen", "Deinstallieren …", "Reparieren"} cancel button "Abbrechen" default button 3 with title "WoW-Mac " & ver)
+		set b to button returned of (display dialog "WoW-Mac ist auf diesem Mac schon eingerichtet." & return & return & "„Reparieren“ bringt die Einrichtung auf den Stand dieser Version " & ver & ": neue Startskripte in der Linux-VM, Einrichtung wiederholen, Start-Apps neu anlegen. Spielstand und Einstellungen bleiben erhalten." & return & return & "Bitte WoW vorher beenden." buttons {"Abbrechen", "Deinstallieren …", "Reparieren"} cancel button "Abbrechen" default button 3 with title "WoW-Mac " & ver)
 		if b is "Reparieren" then
-			my finish(my runWithProgress(eng, "repair --gui", "WoW-Mac wird repariert"), false)
+			set rArgs to "repair --gui"
+			if my val(pf, "PERF_APP") is "" then
+				set appName to my val(pf, "APP_NAME")
+				if appName is "" then set appName to "WoW 3.3.5a"
+				if my askPerfApp(appName) then set rArgs to rArgs & " --perf-app"
+			end if
+			my finish(my runWithProgress(eng, rArgs, "WoW-Mac wird repariert"), false)
 		else if b starts with "Deinstallieren" then
 			try
 				do shell script "open \"$HOME/Applications/WoW-Mac deinstallieren.app\""
@@ -109,6 +115,7 @@ on run
 	set dockArg to ""
 	set b to button returned of (display dialog "Start-App ins Dock legen?" buttons {"Nein", "Ja"} default button 2 with title "Start-App")
 	if b is "Nein" then set dockArg to " --no-dock"
+	if my askPerfApp(appName) then set dockArg to dockArg & " --perf-app"
 
 	display dialog "Alles bereit." & return & return & ¬
 		"Gleich fragt macOS, ob der Installer UTM steuern darf – bitte „Erlauben“ wählen." & return & return & ¬
@@ -117,6 +124,11 @@ on run
 	set args to "install --gui --wow-dir " & quoted form of p & moveArg & " --app-name " & quoted form of appName & dockArg & extra
 	my finish(my runWithProgress(eng, args, "WoW-Mac wird eingerichtet"), true)
 end run
+
+on askPerfApp(appName)
+	set b to button returned of (display dialog "Zusätzlich eine zweite Start-App „" & appName & " Leistung“ (Symbol mit grünem Blitz) anlegen?" & return & return & "Sie stellt die Linux-Oberfläche für WoW auf die halbe Auflösung, UTM vergrößert das Bild auf den Bildschirm: deutlich mehr FPS auf großen Monitoren (gemessen auf 5120×1440: Dalaran 36 → 52, offene Welt ca. 28 → 60), dafür etwas weicheres Bild. Du wählst dann einfach per Klick, welche App du startest." buttons {"Nein", "Ja"} default button 2 with title "Leistungsmodus")
+	return (b is "Ja")
+end askPerfApp
 
 on finish(res, isInstall)
 	if item 1 of res then
@@ -129,8 +141,10 @@ on finish(res, isInstall)
 					"2. Empfohlen bei sehr großen Monitoren: Einstellungen → Display → Renderer Backend: „Apple Core OpenGL“ (spürbar mehr FPS)." buttons {"Später", "UTM öffnen"} default button 2 with icon caution with title "WoW-Mac")
 				if b is "UTM öffnen" then do shell script "open -b com.utmapp.UTM"
 			end if
+			set perfTxt to ""
+			if my val(pf, "PERF_APP") is not "" then set perfTxt to " Mehr FPS: „" & appName & " Leistung“ (grüner Blitz)."
 			set b to button returned of (display dialog "Fertig!" & return & return & ¬
-				"Starte WoW über „" & appName & "“ im Dock (oder in deinem Benutzerordner unter Programme)." & return & return & ¬
+				"Starte WoW über „" & appName & "“ im Dock (oder in deinem Benutzerordner unter Programme)." & perfTxt & return & return & ¬
 				"Beim ersten Start fragt macOS, ob die App UTM und System Events steuern darf – bitte erlauben. Für das automatische Vollbild zusätzlich unter Bedienungshilfen einschalten." & return & return & ¬
 				"Maus: Klick ins Spiel fängt die Maus, Ctrl+Option gibt sie frei." & return & ¬
 				"Beenden: im Spiel Esc → Spiel beenden (nicht das UTM-Fenster schließen)." buttons {"Fertig", "Jetzt starten"} default button 2 with title "WoW-Mac")

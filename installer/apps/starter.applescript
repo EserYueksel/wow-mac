@@ -2,6 +2,7 @@
 -- Startet die Linux-VM "__VMNAME__" in UTM, schaltet ihr Fenster ins Vollbild
 -- und startet darin World of Warcraft 3.3.5a (Hangover-Wine + FEX).
 property vmName : "__VMNAME__"
+property launchScale : "__SCALE__" -- "1" = normal, "0.5" = Leistungsmodus (halbe Auflösung, hochskaliert)
 
 on run
 	try
@@ -49,7 +50,7 @@ on run
 	my enterFullScreen()
 	tell application id "com.utmapp.UTM"
 		try
-			execute of virtual machine named vmName at "/usr/local/bin/wow-launch" with arguments {"3"}
+			execute of virtual machine named vmName at "/usr/local/bin/wow-launch" with arguments {"3", launchScale}
 		on error errMsg
 			display alert "WoW konnte in der VM nicht gestartet werden" message errMsg as warning
 		end try
