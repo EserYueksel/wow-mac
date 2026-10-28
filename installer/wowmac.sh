@@ -5,9 +5,11 @@
 #   wowmac.sh preflight                 Voraussetzungen prüfen (Ausgabe KEY=WERT, für die App)
 #   wowmac.sh check-wow ORDNER          WoW-Ordner prüfen
 #   wowmac.sh install [Optionen]        einrichten – wiederholbar, setzt nach Abbruch fort
-#   wowmac.sh repair                    Einrichtung in der VM erneut ausführen
+#   wowmac.sh repair [--perf-app]       reparieren bzw. aktualisieren: neue Startskripte in die VM,
+#                                       Einrichtung wiederholen, Start-Apps neu bauen (WoW vorher beenden)
 #   wowmac.sh uninstall [Optionen]      alles sauber entfernen (Spielordner bleibt unberührt)
 #   wowmac.sh status                    Zustand anzeigen
+#   wowmac.sh selftest [ORDNER]         Symbole und eine Test-Start-App bauen und prüfen (ändert nichts)
 #
 # Optionen für install:
 #   --wow-dir ORDNER     WoW-3.3.5a-Ordner (mit Wow.exe und Data/)
@@ -18,6 +20,7 @@
 #   --no-dock            Start-App nicht ins Dock legen
 #   --update-utm         zu alte UTM-Version durch die getestete ersetzen
 #   --fresh              eine unterbrochene, noch nicht eingerichtete VM verwerfen und neu anlegen
+#   --perf-app           zusätzlich die Start-App "<Name> Leistung" anlegen (halbe interne Auflösung, mehr FPS)
 #   --gui                von der Installer-App gestartet (keine Dialoge, nur Statusdatei)
 # Optionen für uninstall:
 #   --remove-utm         UTM ebenfalls entfernen (nur wenn der Installer es installiert hat und keine
@@ -184,35 +187,57 @@ to_trash() {   # PFAD – verschiebt in den Papierkorb (wiederherstellbar) statt
 }
 
 make_icns() {   # PNG ICNS
-  local src=$1 out=$2 set s
-  set=$(mktemp -d /tmp/wowmac-icon.XXXXXX)/wow.iconset; mkdir -p "$set"
+  local src=$1 out=$2 dir s
+  dir=$(mktemp -d /tmp/wowmac-icon.XXXXXX) || return 1
+  mkdir -p "$dir/wow.iconset"
   for s in 16 32 128 256 512; do
-    sips -s format png -z $s $s "$src" --out "$set/icon_${s}x${s}.png" >/dev/null 2>&1
-    sips -s format png -z $((s*2)) $((s*2)) "$src" --out "$set/icon_${s}x${s}@2x.png" >/dev/null 2>&1
+    sips -s format png -z $s $s "$src" --out "$dir/wow.iconset/icon_${s}x${s}.png" >/dev/null 2>&1
+    sips -s format png -z $((s*2)) $((s*2)) "$src" --out "$dir/wow.iconset/icon_${s}x${s}@2x.png" >/dev/null 2>&1
   done
-  iconutil -c icns "$set" -o "$out" 2>/dev/null
+  rm -f "$out"; iconutil -c icns "$dir/wow.iconset" -o "$out" 2>/dev/null
+  rm -rf "$dir"; [ -s "$out" ]
+}
+# Symbol der Start-Apps: WoW-Symbol auf einer Kachel im macOS-Raster, Variante "leistung" mit grünem Blitz.
+make_app_icon() {   # QUELLE(icns/png) VARIANTE ZIEL.icns
+  local src=$1 variant=$2 out=$3 t
+  t=$(mktemp -d /tmp/wowmac-icon.XXXXXX) || return 1
+  if osascript -l JavaScript "$HERE/lib/make-icon.js" "$src" "$t/icon.png" "$variant" >/dev/null 2>"$t/err" && [ -s "$t/icon.png" ]; then
+    make_icns "$t/icon.png" "$out"
+  else
+    log "   Symbol ($variant) nicht gezeichnet: $(head -c 200 "$t/err")"; rm -f "$out"
+  fi
+  rm -rf "$t"; [ -s "$out" ]
 }
 
 sed_esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }   # Sonderzeichen für den sed-Ersatz schuetzen
-build_applet() {   # VORLAGE ZIEL BUNDLE-ID ICNS(optional)
-  local src=$1 app=$2 bid=$3 icns=${4:-} tmp
+build_applet() {   # VORLAGE ZIEL BUNDLE-ID [ICNS] [SKALIERUNG]
+  local src=$1 app=$2 bid=$3 icns=${4:-} scale=${5:-1} tmp
   tmp="$SUPPORT/build-$(basename "$app" .app).applescript"
   sed -e "s|__VMNAME__|$(sed_esc "$VM_NAME")|g" -e "s|__APPNAME__|$(sed_esc "$APP_NAME")|g" \
       -e "s|__ENGINE__|$(sed_esc "$SUPPORT/app/installer/wowmac.sh")|g" \
-      -e "s|__UNINSTALLER__|$(sed_esc "$UNINSTALLER_NAME")|g" "$src" > "$tmp" || return 1
+      -e "s|__UNINSTALLER__|$(sed_esc "$UNINSTALLER_NAME")|g" -e "s|__SCALE__|$scale|g" "$src" > "$tmp" || return 1
   case "$(basename "$src")" in starter.*) ;; *) cat "$(dirname "$src")/progress.applescript.inc" >> "$tmp";; esac
   xattr -w com.apple.TextEncoding "utf-8;134217984" "$tmp" 2>/dev/null
   rm -rf "$app"
   osacompile -o "$app" "$tmp" || return 1
   rm -f "$tmp"
-  [ -n "$icns" ] && [ -f "$icns" ] && cp "$icns" "$app/Contents/Resources/applet.icns"
   local P="$app/Contents/Info.plist"
+  if [ -n "$icns" ] && [ -f "$icns" ]; then
+    cp "$icns" "$app/Contents/Resources/applet.icns"
+    # Seit macOS 26 legt osacompile ein Assets.car mit dem Standardsymbol (Schriftrolle) bei,
+    # das applet.icns überdeckt -> entfernen und das Symbol fest auf applet.icns setzen
+    rm -f "$app/Contents/Resources/Assets.car"
+    /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$P" 2>/dev/null
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile applet" "$P" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string applet" "$P"
+  fi
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bid" "$P" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $bid" "$P"
   /usr/libexec/PlistBuddy -c "Set :CFBundleName $(basename "$app" .app)" "$P" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $(basename "$app" .app)" "$P"
   /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string 'Steuert UTM, um die WoW-VM zu starten und ins Vollbild zu schalten.'" "$P" 2>/dev/null
   /usr/libexec/PlistBuddy -c "Add :WoWMacVersion string $WOWMAC_VERSION" "$P" 2>/dev/null
   codesign --force --deep --sign - "$app" >/dev/null 2>&1
   touch "$app"
+  "$LSREGISTER" -f "$app" >/dev/null 2>&1   # Symbol sofort neu einlesen
+  return 0
 }
 
 is_our_app() { [ "$(defaults read "$1/Contents/Info.plist" CFBundleIdentifier 2>/dev/null)" = "$2" ]; }
@@ -265,17 +290,18 @@ do_preflight() {
   echo "RUNNING_PID=$rp"
   echo "PREFS_MANUAL=$(state_get UTM_PREFS_MANUAL)"
   echo "APP_NAME=$(state_get APP_NAME)"; echo "UTM_BY_US=$(state_get UTM_INSTALLED_BY_US)"; echo "VERSION=$WOWMAC_VERSION"
+  local pa; pa=$(state_get PERF_APP); [ -n "$pa" ] && [ -e "$pa" ] || pa=""; echo "PERF_APP=$pa"
 }
 
 # ======================================================================= install
 do_install() {
-  local WOW="" MOVE_TO="" DOCK=1 UPDATE_UTM=0 DISK_GB=64 VM_SET=0 FRESH=0
+  local WOW="" MOVE_TO="" DOCK=1 UPDATE_UTM=0 DISK_GB=64 VM_SET=0 FRESH=0 PERF=0
   VM_NAME=$(state_get VM_NAME); APP_NAME=$(state_get APP_NAME)
   while [ $# -gt 0 ]; do
     case $1 in
       --wow-dir) WOW=$2; shift;; --move-to) MOVE_TO=$2; shift;; --app-name) APP_NAME=$2; shift;;
       --vm-name) VM_NAME=$2; VM_SET=1; shift;; --disk-gb) DISK_GB=$2; shift;; --no-dock) DOCK=0;;
-      --update-utm) UPDATE_UTM=1;; --gui) GUI=1;; --fresh) FRESH=1;;
+      --update-utm) UPDATE_UTM=1;; --gui) GUI=1;; --fresh) FRESH=1;; --perf-app) PERF=1;;
       *) echo "Unbekannte Option: $1"; exit 2;;
     esac; shift
   done
@@ -359,7 +385,7 @@ do_install() {
     ditto "$MNT/UTM.app" "$TARGET/UTM.app" || { hdiutil detach "$MNT" -quiet; die "UTM konnte nicht nach $TARGET kopiert werden."; }
     hdiutil detach "$MNT" -quiet
     UTM_APP="$TARGET/UTM.app"
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$UTM_APP" 2>/dev/null
+    "$LSREGISTER" -f "$UTM_APP" 2>/dev/null
     [ -z "$(state_get UTM_INSTALLED_BY_US)" ] && state_set UTM_INSTALLED_BY_US 1
     log "   UTM $UTM_VERSION installiert: $UTM_APP"
   fi
@@ -504,15 +530,16 @@ return "ok"' "$VM_NAME" >/dev/null 2>&1 && log "   UTM-Snapshot \"Frisch install
 
   # ---------------------------------------------------------------- 10
   step 10 "Start-App und Deinstallation anlegen"
-  install_apps "$DOCK" || die "Die Apps konnten nicht angelegt werden."
+  install_apps "$DOCK" "$PERF" || die "Die Apps konnten nicht angelegt werden."
   state_set INSTALL_DONE 1
   log "== FERTIG. Start: $APPS_DIR/$APP_NAME.app"
   status DONE 100 "Fertig" "$APPS_DIR/$APP_NAME.app"
 }
 
-# Engine dauerhaft ablegen, Start-App und Deinstallations-App bauen
-install_apps() {
-  local dock=$1 icns="" app="$APPS_DIR/$APP_NAME.app" un="$APPS_DIR/$UNINSTALLER_NAME.app" f
+# Engine dauerhaft ablegen, Start-App(s) und Deinstallations-App bauen
+install_apps() {   # START-APP-INS-DOCK(0/1) LEISTUNGS-APP(0/1) [LEISTUNGS-APP-INS-DOCK(0/1), Standard wie Start-App]
+  local dock=$1 perf=${2:-0} pdock=${3:-$1} icns="" ic_n="" ic_p="" f
+  local app="$APPS_DIR/$APP_NAME.app" un="$APPS_DIR/$UNINSTALLER_NAME.app" papp="$APPS_DIR/$APP_NAME Leistung.app"
   mkdir -p "$APPS_DIR" "$SUPPORT/app"
   if [ "$HERE" != "$SUPPORT/app/installer" ]; then
     rm -rf "$SUPPORT/app.neu"; mkdir -p "$SUPPORT/app.neu"
@@ -520,14 +547,29 @@ install_apps() {
   fi
   local WOW; WOW=$(state_get WOW_DIR)
   for f in "$WOW/World of Warcraft.app/Contents/Resources/"*.icns; do [ -f "$f" ] && { icns=$f; break; }; done
-  if [ -z "$icns" ] && [ -s "$SUPPORT/wow-icon.png" ]; then make_icns "$SUPPORT/wow-icon.png" "$SUPPORT/wow.icns" && icns="$SUPPORT/wow.icns"; fi
+  if [ -z "$icns" ] && [ -s "$SUPPORT/wow-icon.png" ]; then icns="$SUPPORT/wow-icon.png"; fi
+  if [ -n "$icns" ]; then
+    if make_app_icon "$icns" normal "$SUPPORT/icon-start.icns"; then ic_n="$SUPPORT/icon-start.icns"
+    elif [ "${icns##*.}" = icns ]; then ic_n=$icns
+    else make_icns "$icns" "$SUPPORT/icon-start.icns" && ic_n="$SUPPORT/icon-start.icns"; fi
+    if [ "$perf" = 1 ]; then
+      if make_app_icon "$icns" leistung "$SUPPORT/icon-leistung.icns"; then ic_p="$SUPPORT/icon-leistung.icns"; else ic_p=$ic_n; fi
+    fi
+  fi
+  log "   Symbole: Quelle ${icns:-keine}, Start-App ${ic_n:-Standard}, Leistungs-App ${ic_p:-–}"
   if [ -e "$app" ] && ! is_our_app "$app" "$STARTER_ID"; then
     log "   Es gibt schon eine fremde App \"$APP_NAME\" – sie wird in den Papierkorb gelegt"; to_trash "$app"
   fi
-  build_applet "$SUPPORT/app/installer/apps/starter.applescript" "$app" "$STARTER_ID" "$icns" || return 1
+  build_applet "$SUPPORT/app/installer/apps/starter.applescript" "$app" "$STARTER_ID" "$ic_n" || return 1
   build_applet "$SUPPORT/app/installer/apps/uninstaller.applescript" "$un" "$UNINSTALLER_ID" "" || return 1
   state_set STARTER_APP "$app"; state_set UNINSTALLER_APP "$un"
-  if [ "$dock" = 1 ]; then dock_add "$app"; state_set DOCK_ADDED 1; fi
+  if [ "$perf" = 1 ]; then
+    if [ -e "$papp" ] && ! is_our_app "$papp" "$STARTER_ID.leistung"; then to_trash "$papp"; fi
+    build_applet "$SUPPORT/app/installer/apps/starter.applescript" "$papp" "$STARTER_ID.leistung" "$ic_p" 0.5 || return 1
+    state_set PERF_APP "$papp"; log "   Leistungs-App: $papp"
+  fi
+  [ "$dock" = 1 ] && { dock_add "$app"; state_set DOCK_ADDED 1; }
+  [ "$perf" = 1 ] && [ "$pdock" = 1 ] && { dock_add "$papp"; state_set DOCK_ADDED 1; }
   log "   Start-App: $app"; log "   Deinstallation: $un"
 }
 
@@ -630,21 +672,48 @@ wait_provision() {
 }
 
 # ======================================================================= repair
+# Reparieren = Aktualisieren: neue Startskripte in die VM, Einrichtung wiederholen, Start-Apps neu bauen.
 do_repair() {
-  while [ $# -gt 0 ]; do case $1 in --gui) GUI=1;; esac; shift; done
+  local PERF=0
+  while [ $# -gt 0 ]; do case $1 in --gui) GUI=1;; --perf-app) PERF=1;; esac; shift; done
   start_logging repair; take_lock
-  VM_NAME=$(state_get VM_NAME); APP_NAME=$(state_get APP_NAME)
-  utm_ensure
+  VM_NAME=$(state_get VM_NAME); APP_NAME=$(state_get APP_NAME); [ -n "$APP_NAME" ] || APP_NAME="WoW 3.3.5a"
+  utm_ensure || die "UTM lässt sich nicht starten."
   [ -n "$VM_NAME" ] && vm_exists "$VM_NAME" || die "Die VM dieser Installation fehlt in UTM. Bitte zuerst „WoW-Mac deinstallieren“ öffnen und danach neu installieren."
-  CUR_STEP=8; CUR_TEXT="Einrichtung in der VM wiederholen"; status RUN 30 "$CUR_TEXT" ""
-  [ "$(vm_status "$VM_NAME")" = stopped ] && vm_share "$VM_NAME" "$(state_get WOW_DIR)"
+
+  CUR_STEP=7; CUR_TEXT="VM starten"; status RUN 5 "$CUR_TEXT" ""; log "== $CUR_TEXT"
+  local was_running=1 i ok=0
+  if [ "$(vm_status "$VM_NAME")" = stopped ]; then was_running=0; vm_share "$VM_NAME" "$(state_get WOW_DIR)"; fi
   vm_start "$VM_NAME"
-  local i; for i in $(seq 1 120); do vm_agent_ok "$VM_NAME" && break; sleep 2; done
+  for i in $(seq 1 120); do vm_agent_ok "$VM_NAME" && { ok=1; break; }; sleep 2; done
+  [ "$ok" = 1 ] || die "Die VM antwortet nicht (Gastagent). Bitte die VM in UTM ausschalten und erneut reparieren."
+  if [ "$was_running" = 1 ]; then   # die Einrichtung beendet Wine-Prozesse -> nie bei laufendem Spiel
+    guest_wow_running "$VM_NAME"
+    case $? in
+      0) die "WoW läuft gerade. Bitte das Spiel zuerst beenden (Esc → Spiel beenden) und dann erneut reparieren.";;
+      2) die "Ob WoW in der VM läuft, ließ sich nicht prüfen. Bitte WoW beenden, die VM in UTM ausschalten und erneut reparieren.";;
+    esac
+  fi
+
+  CUR_TEXT="Startskripte in der VM erneuern"; status RUN 15 "$CUR_TEXT" ""; log "== $CUR_TEXT"
+  local f
+  for f in sbin/wow-provision bin/wow-start bin/wow-launch; do
+    guest_put "$VM_NAME" "$HERE/guest/${f#*/}" "/usr/local/$f" || die "/usr/local/$f ließ sich in der VM nicht erneuern."
+    log "   /usr/local/$f erneuert"
+  done
+
+  CUR_STEP=8; CUR_TEXT="Einrichtung in der VM wiederholen"; status RUN 30 "$CUR_TEXT" ""; log "== $CUR_TEXT"
   local before; before=$(guest_read "$VM_NAME" /var/lib/wow-mac/status | grep -c '^START|')
   guest_exec "$VM_NAME" /usr/local/sbin/wow-provision || die "Einrichtung konnte nicht gestartet werden (Gastagent)."
   wait_provision "$before" || exit 1
   state_set PROVISION_DONE 1
-  status DONE 100 "Reparatur abgeschlossen" ""
+
+  CUR_STEP=10; CUR_TEXT="Start-Apps erneuern"; status RUN 95 "$CUR_TEXT" ""; log "== $CUR_TEXT"
+  local papp perf=$PERF pdock=0
+  papp=$(state_get PERF_APP); [ -n "$papp" ] && [ -e "$papp" ] && perf=1
+  [ "$PERF" = 1 ] && [ ! -e "$APPS_DIR/$APP_NAME Leistung.app" ] && [ "$(state_get DOCK_ADDED)" = 1 ] && pdock=1
+  install_apps 0 "$perf" "$pdock" || die "Die Start-Apps konnten nicht erneuert werden."
+  status DONE 100 "Reparatur abgeschlossen. Beim nächsten Start fragt macOS eventuell noch einmal, ob die Start-App UTM steuern darf – bitte erlauben." ""
   log "== Reparatur fertig"
 }
 
@@ -677,6 +746,9 @@ return "ok"' "$VM_NAME" >/dev/null 2>&1 && log "   VM $VM_NAME gelöscht" || die
   status RUN 30 "Apps und Dock-Eintrag entfernen" ""; log "== Apps"
   local app un; app=$(state_get STARTER_APP); un=$(state_get UNINSTALLER_APP)
   if [ -n "$app" ] && [ -e "$app" ] && is_our_app "$app" "$STARTER_ID"; then dock_remove "$app"; to_trash "$app"; log "   $app -> Papierkorb"; fi
+  local papp; papp=$(state_get PERF_APP)
+  if [ -n "$papp" ] && [ -e "$papp" ] && is_our_app "$papp" "$STARTER_ID.leistung"; then dock_remove "$papp"; to_trash "$papp"; log "   $papp -> Papierkorb"; fi
+  tccutil reset All "$STARTER_ID.leistung" >/dev/null 2>&1
   tccutil reset All "$STARTER_ID" >/dev/null 2>&1; tccutil reset All "$UNINSTALLER_ID" >/dev/null 2>&1
 
   status RUN 50 "UTM-Einstellungen zurücksetzen" ""; log "== UTM-Einstellungen"
@@ -716,9 +788,32 @@ return "ok"' "$VM_NAME" >/dev/null 2>&1 && log "   VM $VM_NAME gelöscht" || die
   local ia="$APPS_DIR/WoW-Mac Installer.app"
   [ -e "$ia" ] && is_our_app "$ia" "io.github.wowmac.installer" && to_trash "$ia" && log "   Installer-App -> Papierkorb"
   local keep="$LOGDIR"
-  rm -rf "$SUPPORT/app" "$SUPPORT/build" "$SUPPORT/seed" "$SUPPORT/wow-icon.png" "$SUPPORT/wow.icns" "$STATE"
+  rm -rf "$SUPPORT/app" "$SUPPORT/build" "$SUPPORT/seed" "$SUPPORT/wow-icon.png" "$SUPPORT/wow.icns" \
+         "$SUPPORT/icon-start.icns" "$SUPPORT/icon-leistung.icns" "$STATE"
   log "== FERTIG. Der Spielordner wurde nicht verändert. Protokolle bleiben in $keep"
   status DONE 100 "Deinstallation abgeschlossen" "Der Spielordner wurde nicht verändert."
+}
+
+# ======================================================================= selftest
+# Baut Symbole und eine Test-Start-App in einen Ordner (Prüfung auf GitHub und bei der Fehlersuche).
+# Ändert nichts an einer Installation. Braucht UTM (für die AppleScript-Befehle des Starters).
+do_selftest() {   # [ORDNER] [QUELLSYMBOL]
+  local d=${1:-/tmp/wowmac-selftest} src=${2:-/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns}
+  local a P
+  mkdir -p "$d" || return 1
+  VM_NAME="WoW-Linux"; APP_NAME="WoW Test"; a="$d/WoW Test Leistung.app"; P="$a/Contents/Info.plist"
+  osascript -l JavaScript "$HERE/lib/make-icon.js" "$src" "$d/leistung.png" leistung >/dev/null || { echo "FEHLER: Symbolzeichnung (JXA)"; return 1; }
+  [ "$(sips -g pixelWidth "$d/leistung.png" 2>/dev/null | awk '/pixelWidth/{print $2}')" = 1024 ] || { echo "FEHLER: Symbol nicht 1024 Pixel breit"; return 1; }
+  make_app_icon "$src" normal "$d/start.icns" || { echo "FEHLER: Symbol normal"; return 1; }
+  make_app_icon "$src" leistung "$d/leistung.icns" || { echo "FEHLER: Symbol Leistung"; return 1; }
+  build_applet "$HERE/apps/starter.applescript" "$a" "$STARTER_ID.selftest" "$d/leistung.icns" 0.5 || { echo "FEHLER: Test-App nicht gebaut"; return 1; }
+  [ ! -e "$a/Contents/Resources/Assets.car" ] || { echo "FEHLER: Assets.car überdeckt das Symbol"; return 1; }
+  /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$P" >/dev/null 2>&1 && { echo "FEHLER: CFBundleIconName gesetzt"; return 1; }
+  cmp -s "$d/leistung.icns" "$a/Contents/Resources/applet.icns" || { echo "FEHLER: applet.icns nicht ersetzt"; return 1; }
+  codesign -v "$a" 2>/dev/null || { echo "FEHLER: Signatur ungültig"; return 1; }
+  osadecompile "$a/Contents/Resources/Scripts/main.scpt" | grep -q 'launchScale : "0.5"' || { echo "FEHLER: Skalierung fehlt im Starter"; return 1; }
+  rm -f "$SUPPORT/build-WoW Test Leistung.applescript"
+  echo "Selbsttest ok: $d"
 }
 
 # ======================================================================= status
@@ -738,6 +833,7 @@ case "$cmd" in
   repair)    do_repair "$@" ;;
   uninstall) do_uninstall "$@" ;;
   status)    do_status ;;
+  selftest)  do_selftest "$@" ;;
   stop)      p=$(cat "$SUPPORT/lock/pid" 2>/dev/null)
              if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; sleep 2; kill -0 "$p" 2>/dev/null && kill -9 "$p"; echo "gestoppt"; else echo "läuft nicht"; fi
              rm -rf "$SUPPORT/lock" ;;
