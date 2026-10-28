@@ -4,11 +4,13 @@
 # Aufruf: vom Mac-Starter (über wow-launch), vom Desktop-Symbol oder im Terminal der VM.
 #
 # Eigene Abweichungen gehoeren nach ~/.config/wow-mac.conf, z. B.:
-#   WOW_SCALE=0.5           # Leistungsmodus: intern halbe Aufloesung, auf den Bildschirm vergrößert
+#   WOW_SCALE=0.5           # Leistungsmodus: halbe Auflösung, UTM vergrößert das Bild
 #   FEX_TSOENABLED=1        # Rueckfall bei Abstuerzen (stabiler, aber deutlich langsamer)
 
+LAUNCH_SCALE="${WOW_SCALE:-}"      # vom Mac-Starter gesetzt (Leistungs-App) – hat Vorrang
 [ -f /etc/wow-mac.conf ] && . /etc/wow-mac.conf
 [ -f "$HOME/.config/wow-mac.conf" ] && . "$HOME/.config/wow-mac.conf"
+[ -n "$LAUNCH_SCALE" ] && WOW_SCALE="$LAUNCH_SCALE"
 
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine-wow}"
 export HODLL="${HODLL:-libwow64fex.dll}"            # FEX als x86-Übersetzer (Alternative: wowbox64.dll)
@@ -47,13 +49,25 @@ if [ ! -f "$WINEPREFIX/system.reg" ]; then
 fi
 [ -e "$WINEPREFIX/drive_c/WoW" ] || ln -sfn "$G" "$WINEPREFIX/drive_c/WoW"
 
-# Leistungsmodus: X-Bildschirm intern kleiner rechnen und auf die volle Größe vergroessern
+# Leistungsmodus: Linux-Bildschirm auf einen kleineren echten Modus stellen (z. B. 2560x720 statt 5120x1440).
+# WoW zeichnet dann nur ein Viertel der Pixel; UTM vergrößert das Bild selbst auf das Vollbild.
+# Nach dem Beenden von WoW wird der ursprüngliche Modus wiederhergestellt.
 OUT=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')
 SCALE="${WOW_SCALE:-1}"
-restore_scale() { [ -n "$OUT" ] && xrandr --output "$OUT" --scale 1x1 >/dev/null 2>&1; }
 if [ -n "$OUT" ] && [ "$SCALE" != "1" ]; then
-  xrandr --output "$OUT" --scale "${SCALE}x${SCALE}" && trap restore_scale EXIT
-  sleep 1
+  CUR=$(xrandr | grep -o 'current [0-9]* x [0-9]*' | awk '{print $2"x"$4}')
+  ORIG_MODE=$(xrandr | awk '/\*/{print $1; exit}')
+  NW=$(awk -v w="${CUR%x*}" -v s="$SCALE" 'BEGIN{printf "%d", int(w*s/8)*8}')
+  NH=$(awk -v h="${CUR#*x}" -v s="$SCALE" 'BEGIN{printf "%d", int(h*s/2)*2}')
+  ML=$(cvt "$NW" "$NH" 60 2>/dev/null | sed -n 's/^Modeline //p' | tr -d '"')
+  NAME=${ML%% *}
+  if [ -n "$NAME" ] && [ -n "$ORIG_MODE" ]; then
+    xrandr --newmode $ML 2>/dev/null; xrandr --addmode "$OUT" "$NAME" 2>/dev/null
+    if xrandr --output "$OUT" --mode "$NAME"; then
+      trap 'xrandr --output "$OUT" --mode "$ORIG_MODE" >/dev/null 2>&1' EXIT
+      sleep 2
+    fi
+  fi
 fi
 
 # Aufloesung = aktueller Bildschirm der VM (Vollbild am Monitor oder am Laptop)

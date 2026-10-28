@@ -1,6 +1,7 @@
 #!/bin/bash
-# wow-launch [WARTEZEIT] – wird vom Mac-Starter über den UTM-Gastagenten aufgerufen (läuft als root):
+# wow-launch [WARTEZEIT] [SKALIERUNG] – wird vom Mac-Starter über den UTM-Gastagenten aufgerufen (läuft als root):
 # wartet auf die grafische Sitzung des Spieler-Benutzers und startet darin wow-start.
+# SKALIERUNG 0.5 = Leistungsmodus (WoW rechnet intern mit halber Auflösung), 1 oder leer = normal.
 # Bekannter Fehler: Beim Wechsel ins UTM-Vollbild verpasst virtio-gpu manchmal einen vblank
 # ("vblank wait timed out"); danach hängen neu gestartete OpenGL-Programme. Dann wird die
 # Oberfläche (lightdm) vor dem Start einmal neu gestartet.
@@ -8,6 +9,8 @@
 U="${WOW_USER:-wow}"
 ID=$(id -u "$U") || exit 1
 XA="/home/$U/.Xauthority"
+SCALE="${2:-1}"
+printf '%s' "$SCALE" | grep -Eq '^(1|0\.[0-9]{1,2})$' || SCALE=1
 
 wait_x() {
   for i in $(seq 1 90); do
@@ -28,5 +31,5 @@ if journalctl -k --since "@$XSTART" 2>/dev/null | grep -q "vblank wait timed out
   sleep 3; wait_x; sleep 6
 fi
 sudo -u "$U" env DISPLAY=:0 XAUTHORITY="$XA" XDG_RUNTIME_DIR="/run/user/$ID" HOME="/home/$U" \
-  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$ID/bus" setsid -f /usr/local/bin/wow-start >/dev/null 2>&1
-echo "WoW-Start ausgeloest"
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$ID/bus" WOW_SCALE="$SCALE" setsid -f /usr/local/bin/wow-start >/dev/null 2>&1
+echo "WoW-Start ausgelöst (Skalierung $SCALE)"
