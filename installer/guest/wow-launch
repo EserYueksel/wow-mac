@@ -1,0 +1,32 @@
+#!/bin/bash
+# wow-launch [WARTEZEIT] – wird vom Mac-Starter über den UTM-Gastagenten aufgerufen (läuft als root):
+# wartet auf die grafische Sitzung des Spieler-Benutzers und startet darin wow-start.
+# Bekannter Fehler: Beim Wechsel ins UTM-Vollbild verpasst virtio-gpu manchmal einen vblank
+# ("vblank wait timed out"); danach hängen neu gestartete OpenGL-Programme. Dann wird die
+# Oberfläche (lightdm) vor dem Start einmal neu gestartet.
+[ -f /etc/wow-mac.conf ] && . /etc/wow-mac.conf
+U="${WOW_USER:-wow}"
+ID=$(id -u "$U") || exit 1
+XA="/home/$U/.Xauthority"
+
+wait_x() {
+  for i in $(seq 1 90); do
+    [ -S /tmp/.X11-unix/X0 ] && [ -f "$XA" ] && \
+      sudo -u "$U" env DISPLAY=:0 XAUTHORITY="$XA" xdpyinfo >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+if pgrep -f 'C:\\WoW\\Wow.exe' >/dev/null; then echo "WoW läuft bereits"; exit 0; fi
+wait_x || { echo "Keine grafische Sitzung"; exit 1; }
+sleep "${1:-2}"      # kurz warten, bis das UTM-Vollbild die Aufloesung gesetzt hat
+XSTART=$(stat -c %Y /tmp/.X11-unix/X0 2>/dev/null || echo 0)
+if journalctl -k --since "@$XSTART" 2>/dev/null | grep -q "vblank wait timed out"; then
+  echo "vblank-Fehler seit X-Start erkannt -> Oberfläche wird neu gestartet"
+  systemctl restart lightdm
+  sleep 3; wait_x; sleep 6
+fi
+sudo -u "$U" env DISPLAY=:0 XAUTHORITY="$XA" XDG_RUNTIME_DIR="/run/user/$ID" HOME="/home/$U" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$ID/bus" setsid -f /usr/local/bin/wow-start >/dev/null 2>&1
+echo "WoW-Start ausgeloest"

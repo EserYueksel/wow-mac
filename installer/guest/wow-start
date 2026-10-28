@@ -1,0 +1,76 @@
+#!/bin/bash
+# wow-start – startet WoW 3.3.5a in der Linux-VM (als Spieler-Benutzer).
+# Kette: Hangover-Wine 11 (ARM64) + FEX (libwow64fex.dll, fuehrt auch ARPL korrekt aus) + OpenGL über virgl.
+# Aufruf: vom Mac-Starter (über wow-launch), vom Desktop-Symbol oder im Terminal der VM.
+#
+# Eigene Abweichungen gehoeren nach ~/.config/wow-mac.conf, z. B.:
+#   WOW_SCALE=0.5           # Leistungsmodus: intern halbe Aufloesung, auf den Bildschirm vergrößert
+#   FEX_TSOENABLED=1        # Rueckfall bei Abstuerzen (stabiler, aber deutlich langsamer)
+
+[ -f /etc/wow-mac.conf ] && . /etc/wow-mac.conf
+[ -f "$HOME/.config/wow-mac.conf" ] && . "$HOME/.config/wow-mac.conf"
+
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine-wow}"
+export HODLL="${HODLL:-libwow64fex.dll}"            # FEX als x86-Übersetzer (Alternative: wowbox64.dll)
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"   # keine Mono-/Gecko-Abfragen
+export WINEDEBUG="${WINEDEBUG:--all}"
+# Leistung (gemessen 28.10.2026, Dalaran, 1280x800): 3 FPS -> ~20 (x87) -> 69 FPS (TSO aus)
+export FEX_X87REDUCEDPRECISION="${FEX_X87REDUCEDPRECISION:-1}"   # x87 mit 64 statt 80 Bit
+export FEX_TSOENABLED="${FEX_TSOENABLED:-0}"                     # Rueckfall bei Abstuerzen: 1
+export FEX_MULTIBLOCK="${FEX_MULTIBLOCK:-1}"
+# Wine-11-Fehler umgehen: bei OpenGL < 3.0 fuellt Wine die Erweiterungstabelle falsch -> Standbild in der Welt
+export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-3.0COMPAT}"
+# Kein VSync im Gast, sonst rastet die Bildrate auf 120/60/40/30 FPS ein
+export vblank_mode="${vblank_mode:-0}"
+
+G=/mnt/wow
+C="$G/WTF/Config.wtf"
+LOGDIR="$HOME/wow-logs"
+mkdir -p "$LOGDIR"
+ls -t "$LOGDIR"/wow-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f      # nur die letzten 10 Protokolle
+
+if pgrep -f 'C:\\WoW\\Wow.exe' >/dev/null; then
+  echo "WoW läuft bereits."; exit 0
+fi
+if [ ! -f "$G/Wow.exe" ] && [ ! -f "$G/WoW.exe" ] && [ ! -f "$G/wow.exe" ]; then
+  command -v zenity >/dev/null && zenity --error --text="Der WoW-Ordner des Macs ist nicht erreichbar (/mnt/wow)." 2>/dev/null
+  echo "FEHLER: /mnt/wow/Wow.exe fehlt"; exit 1
+fi
+
+# Wine-Umgebung bei Bedarf anlegen (normalerweise schon bei der Einrichtung geschehen)
+if [ ! -f "$WINEPREFIX/system.reg" ]; then
+  timeout 900 wineboot -i >/dev/null 2>&1
+  wine reg add 'HKCU\Keyboard Layout\Preload' /v 1 /t REG_SZ /d "${WINE_KBD:-00000409}" /f >/dev/null 2>&1
+  wine reg add 'HKCU\Software\Wine' /v Version /t REG_SZ /d win7 /f >/dev/null 2>&1
+  wine reg add 'HKCU\Software\Wine\DllOverrides' /v mscoree /t REG_SZ /d "" /f >/dev/null 2>&1
+  wine reg add 'HKCU\Software\Wine\DllOverrides' /v mshtml /t REG_SZ /d "" /f >/dev/null 2>&1
+fi
+[ -e "$WINEPREFIX/drive_c/WoW" ] || ln -sfn "$G" "$WINEPREFIX/drive_c/WoW"
+
+# Leistungsmodus: X-Bildschirm intern kleiner rechnen und auf die volle Größe vergroessern
+OUT=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')
+SCALE="${WOW_SCALE:-1}"
+restore_scale() { [ -n "$OUT" ] && xrandr --output "$OUT" --scale 1x1 >/dev/null 2>&1; }
+if [ -n "$OUT" ] && [ "$SCALE" != "1" ]; then
+  xrandr --output "$OUT" --scale "${SCALE}x${SCALE}" && trap restore_scale EXIT
+  sleep 1
+fi
+
+# Aufloesung = aktueller Bildschirm der VM (Vollbild am Monitor oder am Laptop)
+R=$(xrandr 2>/dev/null | grep -o 'current [0-9]* x [0-9]*' | awk '{print $2"x"$4}')
+setkey() { grep -q "^SET $1 " "$C" && sed -i "s|^SET $1 .*|SET $1 \"$2\"|" "$C" || echo "SET $1 \"$2\"" >> "$C"; }
+if [ -n "$R" ]; then
+  mkdir -p "$G/WTF"; [ -f "$C" ] || : > "$C"
+  setkey gxResolution "$R"
+  setkey gxWindow 1
+  setkey gxMaximize 1
+  setkey gxApi opengl
+  setkey gxVSync 0
+fi
+
+LOG="$LOGDIR/wow-$(date +%Y%m%d-%H%M%S).log"
+cd "$WINEPREFIX/drive_c/WoW" || exit 1
+echo "Start $(date -Is) Aufloesung=$R Skalierung=$SCALE TSO=$FEX_TSOENABLED" > "$LOG"
+wine 'C:\WoW\Wow.exe' >> "$LOG" 2>&1
+rc=$?
+echo "Ende $(date -Is) Exit=$rc" >> "$LOG"

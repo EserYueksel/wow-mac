@@ -1,0 +1,158 @@
+#!/bin/bash
+# wow-provision – richtet WoW 3.3.5a in der Linux-VM ein (läuft als root).
+# Erster Lauf: automatisch über cloud-init. Spaeter: "Reparieren" vom Mac aus. Jeder Schritt ist wiederholbar.
+# Fortschritt: /var/lib/wow-mac/status (liest der Mac über den Gastagenten), Protokoll: /var/log/wow-provision.log
+set -u
+. /etc/wow-mac.conf
+U="$WOW_USER"; H="/home/$U"
+S=/var/lib/wow-mac; D=/var/cache/wow-mac
+mkdir -p "$S" "$D"
+exec >>/var/log/wow-provision.log 2>&1
+TOTAL=6
+st()   { printf '%s\n' "$*" >> "$S/status"; echo "== $(date -Is) $*"; }
+step() { st "SCHRITT|$1|$TOTAL|$2"; }
+fail() { st "FEHLER|$*"; exit 1; }
+asuser() { sudo -u "$U" -H env HOME="$H" USER="$U" LOGNAME="$U" "$@"; }
+export DEBIAN_FRONTEND=noninteractive
+APT="apt-get -o DPkg::Lock::Timeout=1200 -y -q"
+st "START|$(date -Is)|${WOWMAC_VERSION:-?}"
+id "$U" >/dev/null 2>&1 || fail "Benutzer $U fehlt"
+
+# ---------------------------------------------------------------- 1
+step 1 "Treiber und Systemdienste"
+$APT install "linux-modules-extra-$(uname -r)" || true      # Tontreiber (snd-hda-intel) für den laufenden Kern
+modprobe snd-hda-intel 2>/dev/null || true
+for p in light-locker xfce4-screensaver; do                  # Sperrbildschirm waere eine Falle: der Benutzer hat kein Passwort
+  dpkg -s "$p" >/dev/null 2>&1 && $APT remove "$p"
+done
+systemctl set-default graphical.target
+systemctl enable lightdm
+mountpoint -q /mnt/wow || mount /mnt/wow || true
+
+# ---------------------------------------------------------------- 2
+step 2 "Hangover (Wine + FEX) laden und installieren"
+A="hangover_${HANGOVER_VERSION}_ubuntu2604_resolute_arm64.tar"
+URL="https://github.com/AndreRH/hangover/releases/download/hangover-${HANGOVER_VERSION}/$A"
+have_hangover() {
+  [ "$(dpkg-query -W -f='${Version}' hangover-libwow64fex 2>/dev/null)" = "$HANGOVER_VERSION" ] && \
+  dpkg -s hangover-wine >/dev/null 2>&1 && command -v wine >/dev/null
+}
+if ! have_hangover; then
+  cd "$D" || fail "Ordner $D"
+  ok=0
+  for i in 1 2 3 4; do
+    if [ -f "$A" ] && echo "$HANGOVER_SHA256  $A" | sha256sum -c --status; then ok=1; break; fi
+    [ -f "$A" ] && [ "$(stat -c %s "$A")" -ge 305000000 ] && rm -f "$A"   # vollständig, aber falsch -> neu laden
+    curl -fL --retry 3 --retry-delay 5 -sS -C - -o "$A" "$URL" || sleep 10
+  done
+  [ "$ok" = 1 ] || fail "Hangover-Download fehlgeschlagen oder Prüfsumme falsch"
+  tar -xf "$A" || fail "Hangover-Archiv beschädigt"
+  $APT install ./hangover-libwow64fex_*_arm64.deb ./hangover-libarm64ecfex_*_arm64.deb \
+               ./hangover-wowbox64_*_arm64.deb ./hangover-wine_*_arm64.deb || fail "Hangover-Installation fehlgeschlagen"
+  have_hangover || fail "Hangover nach der Installation unvollständig"
+fi
+wine --version
+
+# ---------------------------------------------------------------- 3
+step 3 "Oberfläche einrichten (Autologin, kein Bildschirmschoner, Ton)"
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-wow-autologin.conf <<E
+[Seat:*]
+autologin-user=$U
+autologin-user-timeout=0
+user-session=xfce
+E
+X="$H/.config/xfce4/xfconf/xfce-perchannel-xml"
+mkdir -p "$X" "$H/.config/autostart" "$H/Desktop"
+# feste (englische) Benutzerordner, damit das Desktop-Symbol unabhaengig von der Sprache liegt
+cat > "$H/.config/user-dirs.dirs" <<'E'
+XDG_DESKTOP_DIR="$HOME/Desktop"
+XDG_DOWNLOAD_DIR="$HOME/Downloads"
+XDG_TEMPLATES_DIR="$HOME/Templates"
+XDG_PUBLICSHARE_DIR="$HOME/Public"
+XDG_DOCUMENTS_DIR="$HOME/Documents"
+XDG_MUSIC_DIR="$HOME/Music"
+XDG_PICTURES_DIR="$HOME/Pictures"
+XDG_VIDEOS_DIR="$HOME/Videos"
+E
+# Panel-Grundeinstellung vorgeben (sonst fragt Xfce beim ersten Anmelden nach)
+[ -f "$X/xfce4-panel.xml" ] || cp /etc/xdg/xfce4/panel/default.xml "$X/xfce4-panel.xml" 2>/dev/null || true
+cat > "$X/xfce4-power-manager.xml" <<'E'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-power-manager" version="1.0">
+  <property name="xfce4-power-manager" type="empty">
+    <property name="dpms-enabled" type="bool" value="false"/>
+    <property name="blank-on-ac" type="int" value="0"/>
+    <property name="dpms-on-ac-sleep" type="uint" value="0"/>
+    <property name="dpms-on-ac-off" type="uint" value="0"/>
+    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
+  </property>
+</channel>
+E
+cat > "$H/.config/autostart/wow-noblank.desktop" <<'E'
+[Desktop Entry]
+Type=Application
+Name=Kein Bildschirmschoner (WoW)
+Exec=sh -c "xset s off; xset -dpms; xset s noblank"
+E
+cat > "$H/.config/autostart/wow-ton.desktop" <<'E'
+[Desktop Entry]
+Type=Application
+Name=Ton einschalten (WoW)
+Exec=sh -c "sleep 4; amixer -c 0 -q sset Master 100% unmute; amixer -c 0 -q sset PCM 100% unmute; wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.9"
+E
+cat > "$H/Desktop/WoW.desktop" <<'E'
+[Desktop Entry]
+Type=Application
+Name=World of Warcraft
+Exec=/usr/local/bin/wow-start
+Icon=applications-games
+Terminal=false
+E
+chmod +x "$H/Desktop/WoW.desktop"
+chown -R "$U:$U" "$H/.config" "$H/Desktop"
+amixer -c 0 -q sset Master 100% unmute 2>/dev/null; amixer -c 0 -q sset PCM 100% unmute 2>/dev/null; alsactl store 2>/dev/null || true
+
+# ---------------------------------------------------------------- 4
+step 4 "Wine-Umgebung für WoW anlegen"
+P="$H/.wine-wow"
+WENV="WINEPREFIX=$P HODLL=libwow64fex.dll WINEDLLOVERRIDES=mscoree,mshtml= WINEDEBUG=-all"
+if [ ! -f "$P/system.reg" ]; then
+  asuser env $WENV timeout 900 wineboot -i || true
+  asuser env $WENV timeout 120 wineserver -w || true
+fi
+[ -f "$P/system.reg" ] || fail "Wine-Umgebung konnte nicht angelegt werden"
+asuser env $WENV timeout 120 wine reg add 'HKCU\Keyboard Layout\Preload' /v 1 /t REG_SZ /d "$WINE_KBD" /f
+asuser env $WENV timeout 120 wine reg add 'HKCU\Software\Wine' /v Version /t REG_SZ /d win7 /f
+asuser env $WENV timeout 120 wine reg add 'HKCU\Software\Wine\DllOverrides' /v mscoree /t REG_SZ /d "" /f
+asuser env $WENV timeout 120 wine reg add 'HKCU\Software\Wine\DllOverrides' /v mshtml /t REG_SZ /d "" /f
+asuser ln -sfn /mnt/wow "$P/drive_c/WoW"
+asuser env $WENV timeout 60 wineserver -k || true
+
+# ---------------------------------------------------------------- 5
+step 5 "Spielordner prüfen"
+mountpoint -q /mnt/wow || mount /mnt/wow || true
+E=""
+for n in Wow.exe WoW.exe wow.exe; do [ -f "/mnt/wow/$n" ] && E="/mnt/wow/$n" && break; done
+[ -n "$E" ] || fail "Spielordner nicht erreichbar (Wow.exe fehlt in /mnt/wow)"
+asuser test -r "$E" || fail "Keine Leserechte im Spielordner"
+asuser test -w /mnt/wow || st "WARNUNG|Keine Schreibrechte im Spielordner - Einstellungen werden evtl. nicht gespeichert"
+md5sum "$E"
+
+# ---------------------------------------------------------------- 6
+step 6 "Programmsymbol und Aufräumen"
+if [ ! -s "$S/wow-icon.png" ]; then
+  rm -rf "$S/ico" && mkdir -p "$S/ico"
+  wrestool -x -t 14 -o "$S/ico" "$E" 2>/dev/null
+  I=$(ls "$S"/ico/*.ico 2>/dev/null | head -1)
+  if [ -n "$I" ]; then
+    icotool -x -o "$S/ico" "$I" 2>/dev/null
+    B=$(ls "$S"/ico/*.png 2>/dev/null | awk -F_ '{split($NF,a,"x"); print a[1]" "$0}' | sort -n | tail -1 | cut -d' ' -f2-)
+    [ -n "$B" ] && cp "$B" "$S/wow-icon.png"
+  fi
+fi
+ls -la "$S/wow-icon.png" 2>/dev/null || echo "kein Symbol gefunden (Mac nimmt ein Standardsymbol)"
+apt-get clean
+rm -f "$D"/*.deb "$D"/*.tar.gz "$D/$A"
+fstrim -a 2>/dev/null || true
+st "FERTIG|$(date -Is)"
