@@ -7,5 +7,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: UTM fuer die AppleScript-Pruefung installieren
         run: brew install --cask utm
-      - name: Skripte pruefen
+      - name: Skripte pruefen und Test-Start-App bauen
         run: bash tools/ci-check.sh
+        env:
+          CI_ARTIFACTS: ${{ runner.temp }}/symbole
+      - name: Testsymbol aufbewahren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testsymbol
+          path: ${{ runner.temp }}/symbole
+          if-no-files-found: ignore
