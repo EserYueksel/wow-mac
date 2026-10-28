@@ -56,6 +56,7 @@ Unter **Releases** die Datei `WoW-Mac-Installer.zip` laden, entpacken und öffne
 1. deinen **WoW-Ordner** (wird geprüft: `Wow.exe`, `Data/`, nicht nur halb aus iCloud geladen)
 2. ob der Ordner **bleiben oder verschoben** werden soll
 3. den **Namen der Start-App** (Standard: „WoW 3.3.5a“) und ob sie ins Dock soll
+4. ob du zusätzlich die Start-App **„… Leistung“** (grüner Blitz, siehe [Leistungsmodus](#leistungsmodus)) möchtest
 
 Danach läuft alles allein (20–40 Minuten), mit Fortschrittsanzeige. Der Mac bleibt dabei wach. Bricht etwas ab, einfach den Installer erneut starten – **er setzt dort fort**.
 
@@ -67,7 +68,7 @@ Danach läuft alles allein (20–40 Minuten), mit Fortschrittsanzeige. Der Mac b
 | Ubuntu Cloud-Image arm64 | 26.04 (release-20261016) | cloud-images.ubuntu.com | SHA-256 |
 | Hangover (Wine 11 + FEX) | 11.16 | github.com/AndreRH/hangover | SHA-256 |
 | Ubuntu-Pakete (Xfce, Mesa, PipeWire …) | aktuell | Ubuntu-Archiv | apt-Signaturen |
-| Start-App, Deinstallations-App | – | lokal gebaut | – |
+| Start-App(s), Deinstallations-App | – | lokal gebaut | – |
 
 Die Linux-VM liegt in UTM (`WoW-Linux`), die Platte wächst nur bei Bedarf (typisch 10–12 GB). Nach der Einrichtung legt der Installer in UTM den Schnappschuss **„Frisch installiert“** an, falls deine UTM-Version das per Skript erlaubt.
 
@@ -102,13 +103,21 @@ Dann bootet die VM (ca. 30 Sekunden), schaltet ins Vollbild und WoW startet. Ein
 
 ## Leistung (gemessen, MacBook Air M4)
 
-| Auflösung | Ort | FPS |
-|---|---|---|
-| 1280×800 | Dalaran | ca. 69 |
-| 5120×1440 (Ultrawide) | Dalaran | ca. 36 |
-| 5120×1440 (Ultrawide) | offene Welt | ca. 24–32 |
+| Bildschirm | Ort | normal | Leistungsmodus |
+|---|---|---|---|
+| 1280×800 (Fenster) | Dalaran | ca. 69 FPS | – |
+| 5120×1440 (Ultrawide) | Dalaran | ca. 36 FPS | **ca. 52 FPS** |
+| 5120×1440 (Ultrawide) | offene Welt | ca. 24–32 FPS | **ca. 60 FPS** |
 
-Sehr hohe Auflösungen kosten viel, weil jedes Bild durch die VM muss. Spürbar hilft: **Sichtweite**, **Bodenbewuchs** und **Umgebungsdetails** im Grafikmenü etwas herunterzunehmen.
+Sehr hohe Auflösungen kosten viel, weil jedes Bild durch die VM muss. Die WoW-Grafikauflösung herunterzustellen hilft dabei kaum, denn der Linux-Bildschirm bleibt groß. Das löst der Leistungsmodus.
+
+### Leistungsmodus
+
+Die zweite Start-App **„… Leistung“** (Symbol mit grünem Blitz) stellt den Linux-Bildschirm vor dem Start auf die **halbe Breite und Höhe** (z. B. 2560×720 statt 5120×1440). WoW zeichnet dann nur ein Viertel der Pixel, und UTM vergrößert das Bild selbst auf das Vollbild. Das Ergebnis: deutlich mehr FPS, dafür ein etwas weicheres Bild. Nach dem Beenden von WoW wird die alte Auflösung wiederhergestellt.
+
+Beide Apps nutzen dieselbe VM und denselben Spielordner, du wählst einfach per Klick. Wer die Leistungs-App bei der Installation nicht angelegt hat: Installer erneut öffnen → **„Reparieren“** → die Frage nach der Leistungs-App mit „Ja“ beantworten.
+
+Für Bastler: Wer WoW über das Desktop-Symbol in der VM startet, kann den Faktor in `~/.config/wow-mac.conf` setzen (`WOW_SCALE=0.5`, auch `0.75` geht). Die Start-Apps auf dem Mac geben ihn selbst vor (normal 1, Leistung 0,5).
 
 ---
 
@@ -119,7 +128,17 @@ Sehr hohe Auflösungen kosten viel, weil jedes Bild durch die VM muss. Spürbar 
 3. **Kein Ton** – Mac-Lautstärke prüfen; die VM gibt den Ton direkt über CoreAudio aus. Sonst VM neu starten.
 4. **Maus gefangen** – **Ctrl + Option** drückt sie frei.
 5. **Gelegentliche Abstürze** – in der VM in `~/.config/wow-mac.conf` die Zeile `FEX_TSOENABLED=1` eintragen (stabiler, aber deutlich langsamer).
-6. **Irgendetwas ist kaputt** – Installer erneut öffnen → **„Reparieren“**. Das wiederholt die Einrichtung in der VM; Spielstand und Einstellungen bleiben.
+6. **Irgendetwas ist kaputt** – WoW beenden, Installer erneut öffnen → **„Reparieren“**. Das erneuert die Startskripte in der VM, wiederholt die Einrichtung und baut die Start-Apps neu; Spielstand und Einstellungen bleiben. Danach fragt macOS eventuell noch einmal, ob die Start-App UTM steuern darf.
+7. **Start-App zeigt eine graue Schriftrolle statt des WoW-Symbols** – betraf Version 1.0.0 unter macOS 26 und neuer. Mit „Reparieren“ aus Version 1.1.0 behoben.
+
+## Aktualisieren
+
+Die Zeile aus [Variante A](#variante-a--eine-zeile-im-terminal-empfohlen) erneut ausführen. Der Installer erkennt die bestehende Einrichtung; **„Reparieren“** bringt sie auf den neuen Stand, ohne die VM neu aufzusetzen.
+
+### Änderungen
+
+- **1.1.0** – Leistungsmodus als zweite Start-App („… Leistung“, grüner Blitz). Start-App-Symbole unter macOS 26+ repariert (macOS legte sein Standardsymbol darüber) und auf eine Kachel im macOS-Raster gesetzt. „Reparieren“ aktualisiert jetzt auch die Startskripte in der VM und die Start-Apps und prüft vorher, ob WoW läuft. Selbsttest `wowmac.sh selftest` (läuft auch bei jedem Push auf GitHub).
+- **1.0.0** – erste Version.
 
 Protokolle liegen in `~/Library/Logs/WoW-Mac/`.
 
@@ -159,8 +178,8 @@ Aufbau des Repos:
 
 ```
 install.sh                    Einstieg per Terminal-Zeile
-installer/wowmac.sh           eigentlicher Installer (install, repair, uninstall, status)
-installer/lib/                gemeinsame Funktionen, qcow2-Vergrößerung ohne qemu-img
+installer/wowmac.sh           eigentlicher Installer (install, repair, uninstall, status, selftest)
+installer/lib/                gemeinsame Funktionen, qcow2-Vergrößerung ohne qemu-img, Symbolzeichnung (JXA)
 installer/guest/              läuft in der VM: cloud-init-Vorlage, Einrichtung, Start-Skripte
 installer/apps/               AppleScript-Vorlagen für Installer, Start-App, Deinstallation
 ```
