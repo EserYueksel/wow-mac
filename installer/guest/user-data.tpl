@@ -87,5 +87,9 @@ write_files:
     permissions: "0755"
     encoding: b64
     content: __B64_LAUNCH__
+  - path: /usr/local/sbin/wow-tastenwaechter
+    permissions: "0755"
+    encoding: b64
+    content: __B64_TASTEN__
 runcmd:
   - [/usr/local/sbin/wow-provision]
