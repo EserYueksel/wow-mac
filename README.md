@@ -130,7 +130,10 @@ Für Bastler: Wer WoW über das Desktop-Symbol in der VM startet, kann den Fakto
 5. **Gelegentliche Abstürze** – in der VM in `~/.config/wow-mac.conf` die Zeile `FEX_TSOENABLED=1` eintragen (stabiler, aber deutlich langsamer).
 6. **Irgendetwas ist kaputt** – WoW beenden, Installer erneut öffnen → **„Reparieren“**. Das erneuert die Startskripte in der VM, wiederholt die Einrichtung und baut die Start-Apps neu; Spielstand und Einstellungen bleiben. Danach fragt macOS eventuell noch einmal, ob die Start-App UTM steuern darf.
 7. **Start-App zeigt eine graue Schriftrolle statt des WoW-Symbols** – betraf Version 1.0.0 unter macOS 26 und neuer. Mit „Reparieren“ aus Version 1.1.0 behoben.
-8. **WoW verschwindet beim Drücken von D, oder die Pfeiltasten wechseln die Arbeitsfläche** – nach dem Freigeben der Maus mit Ctrl + Option bekommt die VM das Loslassen der Tasten nicht mit, Ctrl und Alt bleiben für Linux „gedrückt“. Dann wird D zu Ctrl+Alt+D („Desktop anzeigen“). Sofort-Hilfe: in die VM klicken, Ctrl und Option einmal drücken und loslassen, WoW über die Taskleiste zurückholen. Ab Version 1.1.1 sind die Tastenkürzel der VM-Oberfläche abgeschaltet – ältere Installationen mit „Reparieren“ aktualisieren.
+8. **WoW verschwindet beim Drücken von D, oder die Pfeiltasten wechseln die Arbeitsfläche** – nach dem Freigeben der Maus mit Ctrl + Option bekommt die VM das Loslassen der Tasten nicht mit, Ctrl und Alt bleiben für Linux „gedrückt“. Dann wird D zu Ctrl+Alt+D („Desktop anzeigen“). Sofort-Hilfe: in die VM klicken, Ctrl und Option einmal drücken und loslassen, WoW über die Taskleiste zurückholen. Ab Version 1.1.1 sind die Tastenkürzel der VM-Oberfläche abgeschaltet. Ältere Installationen entweder mit „Reparieren“ aktualisieren oder – schneller, WoW darf dabei laufen – bei laufender VM diese Zeile ins Terminal:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/EserYueksel/wow-mac/main/tools/tastenkuerzel-aus.sh | bash
+   ```
 
 ## Aktualisieren
 

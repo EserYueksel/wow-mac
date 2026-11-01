@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 for f in install.sh installer/wowmac.sh installer/lib/*.sh installer/build-installer-app.sh \
-         installer/guest/wow-start installer/guest/wow-launch installer/guest/wow-provision; do
+         installer/guest/wow-start installer/guest/wow-launch installer/guest/wow-provision tools/tastenkuerzel-aus.sh; do
   /bin/bash -n "$f" && echo "Syntax ok: $f"
 done
 T=$(mktemp -d)
