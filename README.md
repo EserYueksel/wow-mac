@@ -130,6 +130,7 @@ Für Bastler: Wer WoW über das Desktop-Symbol in der VM startet, kann den Fakto
 5. **Gelegentliche Abstürze** – in der VM in `~/.config/wow-mac.conf` die Zeile `FEX_TSOENABLED=1` eintragen (stabiler, aber deutlich langsamer).
 6. **Irgendetwas ist kaputt** – WoW beenden, Installer erneut öffnen → **„Reparieren“**. Das erneuert die Startskripte in der VM, wiederholt die Einrichtung und baut die Start-Apps neu; Spielstand und Einstellungen bleiben. Danach fragt macOS eventuell noch einmal, ob die Start-App UTM steuern darf.
 7. **Start-App zeigt eine graue Schriftrolle statt des WoW-Symbols** – betraf Version 1.0.0 unter macOS 26 und neuer. Mit „Reparieren“ aus Version 1.1.0 behoben.
+8. **WoW verschwindet beim Drücken von D, oder die Pfeiltasten wechseln die Arbeitsfläche** – nach dem Freigeben der Maus mit Ctrl + Option bekommt die VM das Loslassen der Tasten nicht mit, Ctrl und Alt bleiben für Linux „gedrückt“. Dann wird D zu Ctrl+Alt+D („Desktop anzeigen“). Sofort-Hilfe: in die VM klicken, Ctrl und Option einmal drücken und loslassen, WoW über die Taskleiste zurückholen. Ab Version 1.1.1 sind die Tastenkürzel der VM-Oberfläche abgeschaltet – ältere Installationen mit „Reparieren“ aktualisieren.
 
 ## Aktualisieren
 
@@ -137,6 +138,7 @@ Die Zeile aus [Variante A](#variante-a--eine-zeile-im-terminal-empfohlen) erneut
 
 ### Änderungen
 
+- **1.1.1** – Tastenkürzel der VM-Oberfläche (Xfce) abgeschaltet: Nach dem Freigeben der Maus mit Ctrl + Option konnten Spieltasten wie D oder die Pfeiltasten WoW minimieren oder die Arbeitsfläche wechseln.
 - **1.1.0** – Leistungsmodus als zweite Start-App („… Leistung“, grüner Blitz). Start-App-Symbole unter macOS 26+ repariert (macOS legte sein Standardsymbol darüber) und auf eine Kachel im macOS-Raster gesetzt. „Reparieren“ aktualisiert jetzt auch die Startskripte in der VM und die Start-Apps und prüft vorher, ob WoW läuft. Selbsttest `wowmac.sh selftest` (läuft auch bei jedem Push auf GitHub).
 - **1.0.0** – erste Version.
 

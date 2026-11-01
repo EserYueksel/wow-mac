@@ -54,7 +54,7 @@ fi
 wine --version
 
 # ---------------------------------------------------------------- 3
-step 3 "Oberfläche einrichten (Autologin, kein Bildschirmschoner, Ton)"
+step 3 "Oberfläche einrichten (Autologin, kein Bildschirmschoner, Ton, keine Tastenkürzel)"
 mkdir -p /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm.conf.d/50-wow-autologin.conf <<E
 [Seat:*]
@@ -110,6 +110,36 @@ Icon=applications-games
 Terminal=false
 E
 chmod +x "$H/Desktop/WoW.desktop"
+# Xfce-Tastenkürzel abschalten (WoW braucht keins davon). Grund: Gibt man die Maus mit Ctrl+Option frei,
+# sieht die VM das Loslassen der Tasten nicht mehr – Ctrl+Alt bleiben für Linux „gedrückt“, und Spieltasten
+# werden zu Kürzeln: D -> Ctrl+Alt+D „Desktop anzeigen“ (WoW verschwindet), Pfeile -> Arbeitsfläche wechseln.
+# Läuft die Sitzung, über xfconf (sonst überschreibt xfconfd die Datei); sonst Datei vorgeben. Mehrfach ausführbar.
+BUS="/run/user/$(id -u "$U")/bus"
+if pgrep -u "$U" -x xfconfd >/dev/null && [ -S "$BUS" ]; then
+  xq() { asuser env DBUS_SESSION_BUS_ADDRESS="unix:path=$BUS" xfconf-query -c xfce4-keyboard-shortcuts "$@"; }
+  for p in xfwm4 commands; do
+    xq -p "/$p/custom/override" -n -t bool -s true
+    xq -l | grep "^/$p/custom/" | grep -v '/override$' | while IFS= read -r k; do xq -p "$k" -r; done
+  done
+  echo "Tastenkürzel (live) übrig: $(xq -l | grep -c '/custom/<')"
+else
+  cat > "$X/xfce4-keyboard-shortcuts.xml" <<'E'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-keyboard-shortcuts" version="1.0">
+  <property name="commands" type="empty">
+    <property name="custom" type="empty">
+      <property name="override" type="bool" value="true"/>
+    </property>
+  </property>
+  <property name="xfwm4" type="empty">
+    <property name="custom" type="empty">
+      <property name="override" type="bool" value="true"/>
+    </property>
+  </property>
+</channel>
+E
+  echo "Tastenkürzel: Datei vorgegeben"
+fi
 chown -R "$U:$U" "$H/.config" "$H/Desktop"
 amixer -c 0 -q sset Master 100% unmute 2>/dev/null; amixer -c 0 -q sset PCM 100% unmute 2>/dev/null; alsactl store 2>/dev/null || true
 
