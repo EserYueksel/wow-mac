@@ -475,17 +475,17 @@ return "ok"' "$VM_NAME" >/dev/null 2>&1 || die "Die unvollständige VM $VM_NAME 
     bash "$HERE/lib/qcow2-grow.sh" "$B/wow-linux.qcow2" "$DISK_GB" || die "VM-Platte konnte nicht vergrößert werden."
     detect_locale
     log "   Tastatur: $KBD_NAME -> $XKB_L/$XKB_V (Wine $WINE_KBD), Sprache $LOCALE, Zeitzone $TZ_NAME"
-    local G="$HERE/guest" b64p b64s b64l b64t
+    local G="$HERE/guest" b64p b64s b64l b64t b64r
     b64p=$(base64 < "$G/wow-provision" | tr -d '\n'); b64s=$(base64 < "$G/wow-start" | tr -d '\n'); b64l=$(base64 < "$G/wow-launch" | tr -d '\n')
-    b64t=$(base64 < "$G/wow-tastenwaechter" | tr -d '\n')
+    b64t=$(base64 < "$G/wow-tastenwaechter" | tr -d '\n'); b64r=$(base64 < "$G/wow-resize" | tr -d '\n')
     awk -v user=wow -v uid="$(id -u)" -v loc="$LOCALE" -v tz="$TZ_NAME" -v xl="$XKB_L" -v xv="$XKB_V" \
         -v lp="$LANGPACK" -v wk="$WINE_KBD" -v hv="$HANGOVER_VERSION" -v hs="$HANGOVER_SHA256" -v wv="$WOWMAC_VERSION" \
-        -v bp="$b64p" -v bs="$b64s" -v bl="$b64l" -v bt="$b64t" '
+        -v bp="$b64p" -v bs="$b64s" -v bl="$b64l" -v bt="$b64t" -v br="$b64r" '
       $0 == "__LANGPACK__" { if (lp != "") print lp; next }
       { gsub(/__USER__/, user); gsub(/__UID__/, uid); gsub(/__LOCALE__/, loc); gsub(/__TZ__/, tz)
         gsub(/__XKB_LAYOUT__/, xl); gsub(/__XKB_VARIANT__/, "\"" xv "\""); gsub(/__WINE_KBD__/, wk)
         gsub(/__HANGOVER_VERSION__/, hv); gsub(/__HANGOVER_SHA256__/, hs); gsub(/__WOWMAC_VERSION__/, wv)
-        gsub(/__B64_PROVISION__/, bp); gsub(/__B64_START__/, bs); gsub(/__B64_LAUNCH__/, bl); gsub(/__B64_TASTEN__/, bt); print }' \
+        gsub(/__B64_PROVISION__/, bp); gsub(/__B64_START__/, bs); gsub(/__B64_LAUNCH__/, bl); gsub(/__B64_TASTEN__/, bt); gsub(/__B64_RESIZE__/, br); print }' \
       "$G/user-data.tpl" > "$B/seed/user-data" || die "user-data"
     grep -q "__" "$B/seed/user-data" && grep -n "__[A-Z_]*__" "$B/seed/user-data" | head -3 && die "Platzhalter in user-data nicht ersetzt."
     printf 'instance-id: wowmac-%s\nlocal-hostname: wow-linux\n' "$(date +%Y%m%d%H%M%S)" > "$B/seed/meta-data"
@@ -698,7 +698,7 @@ do_repair() {
 
   CUR_TEXT="Startskripte in der VM erneuern"; status RUN 15 "$CUR_TEXT" ""; log "== $CUR_TEXT"
   local f
-  for f in sbin/wow-provision bin/wow-start bin/wow-launch sbin/wow-tastenwaechter; do
+  for f in sbin/wow-provision bin/wow-start bin/wow-launch bin/wow-resize sbin/wow-tastenwaechter; do
     guest_put "$VM_NAME" "$HERE/guest/${f#*/}" "/usr/local/$f" || die "/usr/local/$f ließ sich in der VM nicht erneuern."
     log "   /usr/local/$f erneuert"
   done

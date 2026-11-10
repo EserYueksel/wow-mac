@@ -11,13 +11,38 @@ on run
 		display alert "UTM fehlt" message "UTM wurde nicht gefunden. Bitte den WoW-Mac-Installer erneut ausführen." as critical
 		return
 	end try
+	-- Frisch gestartet kennt UTM seine VMs erst nach ein paar Sekunden: so lange nachfragen (max. 60 s)
+	set vmFound to false
+	set lastErr to ""
+	repeat 60 times
+		try
+			with timeout of 10 seconds
+				tell application id "com.utmapp.UTM" to set vmState to status of virtual machine named vmName
+			end timeout
+			set vmFound to true
+			exit repeat
+		on error errMsg number errNum
+			set lastErr to errMsg
+			if errNum is -1743 then
+				my noAutomation()
+				return
+			end if
+		end try
+		delay 1
+	end repeat
+	if not vmFound then
+		display alert "WoW konnte nicht gestartet werden" message "Die VM „" & vmName & "“ wurde in UTM nicht gefunden:" & return & lastErr as critical
+		return
+	end if
 	try
-		tell application id "com.utmapp.UTM"
-			set vm to virtual machine named vmName
-			set vmState to status of vm
-			if vmState is stopped or vmState is paused then start vm
-			activate
-		end tell
+		with timeout of 60 seconds
+			tell application id "com.utmapp.UTM"
+				set vm to virtual machine named vmName
+				set vmState to status of vm
+				if vmState is stopped or vmState is paused then start vm
+				activate
+			end tell
+		end timeout
 	on error errMsg number errNum
 		if errNum is -1743 then
 			my noAutomation()
@@ -66,7 +91,7 @@ on enterFullScreen()
 				tell process "UTM"
 					set frontmost to true
 					repeat with w in windows
-						if name of w is vmName then
+						if name of w starts with vmName then
 							if value of attribute "AXFullScreen" of w is false then set value of attribute "AXFullScreen" of w to true
 							return
 						end if

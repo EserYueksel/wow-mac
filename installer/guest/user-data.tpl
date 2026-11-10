@@ -52,6 +52,9 @@ packages:
   - x11-utils
   - dbus-x11
   - spice-vdagent
+  - xvfb
+  - xdotool
+  - wmctrl
   - mesa-utils
   - mesa-vulkan-drivers
   - pipewire-audio
@@ -91,5 +94,9 @@ write_files:
     permissions: "0755"
     encoding: b64
     content: __B64_TASTEN__
+  - path: /usr/local/bin/wow-resize
+    permissions: "0755"
+    encoding: b64
+    content: __B64_RESIZE__
 runcmd:
   - [/usr/local/sbin/wow-provision]

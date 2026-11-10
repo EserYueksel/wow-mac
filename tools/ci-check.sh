@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 for f in install.sh installer/wowmac.sh installer/lib/*.sh installer/build-installer-app.sh \
-         installer/guest/wow-start installer/guest/wow-launch installer/guest/wow-provision tools/tasten-fix.sh; do
+         installer/guest/wow-start installer/guest/wow-launch installer/guest/wow-resize installer/guest/wow-provision tools/tasten-fix.sh; do
   /bin/bash -n "$f" && echo "Syntax ok: $f"
 done
 python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' installer/guest/wow-tastenwaechter && echo "Syntax ok: installer/guest/wow-tastenwaechter"

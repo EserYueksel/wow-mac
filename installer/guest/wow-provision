@@ -101,6 +101,29 @@ Type=Application
 Name=Ton einschalten (WoW)
 Exec=sh -c "sleep 4; amixer -c 0 -q sset Master 100% unmute; amixer -c 0 -q sset PCM 100% unmute; wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.9"
 E
+# Fenstergröße: wow-resize stellt die Auflösung auf die Größe des UTM-Fensters ein und ersetzt dabei die
+# Bildschirmfunktion von spice-vdagent (deren Auflösungswechsel ließ den Grafiktreiber hängen).
+# Der normale Autostart von spice-vdagent wird deshalb für diesen Benutzer abgeschaltet.
+for p in xvfb xdotool wmctrl; do
+  dpkg -s "$p" >/dev/null 2>&1 || NEED="${NEED:-} $p"
+done
+if [ -n "${NEED:-}" ]; then $APT install $NEED || { apt-get -q update; $APT install $NEED; } || st "WARNUNG|Pakete$NEED fehlen - das Fenster lässt sich evtl. nicht frei ziehen"; fi
+if [ -x /usr/local/bin/wow-resize ]; then
+  cat > "$H/.config/autostart/wow-resize.desktop" <<'E'
+[Desktop Entry]
+Type=Application
+Name=Fenstergröße (WoW)
+Exec=/usr/local/bin/wow-resize
+NoDisplay=true
+E
+  cat > "$H/.config/autostart/spice-vdagent.desktop" <<'E'
+[Desktop Entry]
+Type=Application
+Name=Spice vdagent
+Exec=/usr/bin/spice-vdagent
+Hidden=true
+E
+fi
 cat > "$H/Desktop/WoW.desktop" <<'E'
 [Desktop Entry]
 Type=Application
@@ -167,6 +190,12 @@ else
   st "WARNUNG|Tastenwächter fehlt (/usr/local/sbin/wow-tastenwaechter)"
 fi
 amixer -c 0 -q sset Master 100% unmute 2>/dev/null; amixer -c 0 -q sset PCM 100% unmute 2>/dev/null; alsactl store 2>/dev/null || true
+# Läuft schon eine Sitzung ohne wow-resize (Aktualisierung von einer älteren Version), die Oberfläche einmal
+# neu starten, damit der Autostart greift. WoW läuft dabei nicht: "Reparieren" prüft das vorher.
+if [ -x /usr/local/bin/wow-resize ] && systemctl is-active -q lightdm && pgrep -u "$U" -x xfce4-session >/dev/null \
+   && ! pgrep -u "$U" -f '/usr/local/bin/wow-resize' >/dev/null; then
+  systemctl restart lightdm || true
+fi
 
 # ---------------------------------------------------------------- 4
 step 4 "Wine-Umgebung für WoW anlegen"

@@ -97,7 +97,9 @@ Dann bootet die VM (ca. 30 Sekunden), schaltet ins Vollbild und WoW startet. Ein
 | Starten | Start-App im Dock |
 | Maus fangen / freigeben | ins Spiel klicken / **Ctrl + Option** |
 | Beenden | im Spiel **Esc → Spiel beenden** (nicht das UTM-Fenster schließen) |
-| Monitor oder Laptop | die Auflösung passt sich beim Start automatisch an |
+| Vollbild verlassen | **Ctrl + Option**, dann mit der Maus an den oberen Rand → grüner Knopf (oder Menü „View → Exit Full Screen“) |
+| Fenstergröße ändern | das UTM-Fenster an einer Ecke ziehen – auch im laufenden Spiel, in jedem Format. Nach dem Loslassen dauert es zwei bis vier Sekunden, bis WoW in der neuen Größe zeichnet |
+| Monitor oder Laptop | die Auflösung ist immer die Größe des UTM-Fensters (Vollbild = ganzer Bildschirm) |
 | Tastatur | wird vom Mac übernommen (z. B. deutsche Mac-Tastatur: ä ö ü ß @ € [ ] mit Wahltaste) |
 | AddOns | wie immer in `Interface/AddOns` im WoW-Ordner |
 
@@ -109,11 +111,11 @@ Dann bootet die VM (ca. 30 Sekunden), schaltet ins Vollbild und WoW startet. Ein
 | 5120×1440 (Ultrawide) | Dalaran | ca. 36 FPS | **ca. 52 FPS** |
 | 5120×1440 (Ultrawide) | offene Welt | ca. 24–32 FPS | **ca. 60 FPS** |
 
-Sehr hohe Auflösungen kosten viel, weil jedes Bild durch die VM muss. Die WoW-Grafikauflösung herunterzustellen hilft dabei kaum, denn der Linux-Bildschirm bleibt groß. Das löst der Leistungsmodus.
+Sehr hohe Auflösungen kosten viel, weil jedes Bild durch die VM muss. Die Auflösung im WoW-Grafikmenü hat keine Wirkung: WoW zeichnet immer in der Größe des UTM-Fensters. Mehr FPS gibt es deshalb auf zwei Wegen: das Fenster kleiner ziehen oder den Leistungsmodus nehmen.
 
 ### Leistungsmodus
 
-Die zweite Start-App **„… Leistung“** (Symbol mit grünem Blitz) stellt den Linux-Bildschirm vor dem Start auf die **halbe Breite und Höhe** (z. B. 2560×720 statt 5120×1440). WoW zeichnet dann nur ein Viertel der Pixel, und UTM vergrößert das Bild selbst auf das Vollbild. Das Ergebnis: deutlich mehr FPS, dafür ein etwas weicheres Bild. Nach dem Beenden von WoW wird die alte Auflösung wiederhergestellt.
+Die zweite Start-App **„… Leistung“** (Symbol mit grünem Blitz) stellt den Linux-Bildschirm vor dem Start auf die **halbe Breite und Höhe** (z. B. 2560×720 statt 5120×1440). WoW zeichnet dann nur ein Viertel der Pixel, und UTM vergrößert das Bild selbst auf das Vollbild. Das Ergebnis: deutlich mehr FPS, dafür ein etwas weicheres Bild. Nach dem Beenden von WoW wird die alte Auflösung wiederhergestellt. Der Leistungsmodus ist für das Vollbild gedacht; im Fenster wird das Fenster stattdessen entsprechend kleiner.
 
 Beide Apps nutzen dieselbe VM und denselben Spielordner, du wählst einfach per Klick. Wer die Leistungs-App bei der Installation nicht angelegt hat: Installer erneut öffnen → **„Reparieren“** → die Frage nach der Leistungs-App mit „Ja“ beantworten.
 
@@ -123,7 +125,7 @@ Für Bastler: Wer WoW über das Desktop-Symbol in der VM startet, kann den Fakto
 
 ## Häufige Probleme
 
-1. **Standbild direkt nach dem Start** – passiert, wenn während des Starts zwischen Fenster und Vollbild gewechselt wurde. Start-App erneut öffnen; hilft das nicht: in UTM die VM stoppen und die App erneut starten.
+1. **Standbild oder schwarzes Bild** – bis Version 1.1.1 hing die Grafik der VM, sobald das UTM-Fenster gezogen oder das Vollbild gewechselt wurde. Ab 1.2.0 behoben („Reparieren“ genügt). Falls es doch passiert: in UTM die VM stoppen und die Start-App erneut öffnen.
 2. **WoW schließt sich, wenn im Grafikmenü „Fenstermodus“ oder „Maximiert“ umgeschaltet wird** – diese beiden Einstellungen nicht anfassen; die Start-App setzt sie bei jedem Start richtig.
 3. **Kein Ton** – Mac-Lautstärke prüfen; die VM gibt den Ton direkt über CoreAudio aus. Sonst VM neu starten.
 4. **Maus gefangen** – **Ctrl + Option** drückt sie frei.
@@ -134,6 +136,8 @@ Für Bastler: Wer WoW über das Desktop-Symbol in der VM startet, kann den Fakto
    ```bash
    curl -fsSL https://raw.githubusercontent.com/EserYueksel/wow-mac/main/tools/tasten-fix.sh | bash
    ```
+9. **Meldung „WoW konnte nicht gestartet werden … Can’t get virtual machine“ beim ersten Klick** – bis Version 1.1.1 fragte die Start-App die VM ab, bevor ein frisch gestartetes UTM seine Liste geladen hatte. Ab 1.2.0 wartet sie darauf („Reparieren“ genügt).
+10. **Nach dem Ziehen zeigt WoW nur einen Ausschnitt oder bleibt klein** – das Fenster noch einmal ein Stück ziehen. Die Anpassung braucht die Pakete `xvfb`, `xdotool` und `wmctrl` in der VM; „Reparieren“ installiert sie nach.
 
 ## Aktualisieren
 
@@ -141,6 +145,7 @@ Die Zeile aus [Variante A](#variante-a--eine-zeile-im-terminal-empfohlen) erneut
 
 ### Änderungen
 
+- **1.2.0** – Das UTM-Fenster lässt sich frei ziehen, auch im laufenden Spiel und in jedem Format; Vollbild an/aus ohne Hänger. Dafür stellt ein eigenes kleines Skript in der VM (`wow-resize`) die Auflösung ein und passt das WoW-Fenster an; die Bildschirmfunktion von `spice-vdagent`, die den Grafiktreiber hängen ließ, ist abgeschaltet. Die Start-App wartet nach einem Kaltstart von UTM, bis die VM bekannt ist (keine Fehlermeldung mehr beim ersten Klick). Bestehende Installationen: „Reparieren“.
 - **1.1.1** – Tastenwächter in der VM: Nach dem Freigeben der Maus mit Ctrl + Option blieben Ctrl/Alt in der VM hängen (M schaltete die Musik aus, S den Ton, D minimierte WoW). Der Wächter löst hängende Sondertasten selbst; zusätzlich sind die Tastenkürzel der VM-Oberfläche (Xfce) abgeschaltet. Für ältere Installationen: `tools/tasten-fix.sh`.
 - **1.1.0** – Leistungsmodus als zweite Start-App („… Leistung“, grüner Blitz). Start-App-Symbole unter macOS 26+ repariert (macOS legte sein Standardsymbol darüber) und auf eine Kachel im macOS-Raster gesetzt. „Reparieren“ aktualisiert jetzt auch die Startskripte in der VM und die Start-Apps und prüft vorher, ob WoW läuft. Selbsttest `wowmac.sh selftest` (läuft auch bei jedem Push auf GitHub).
 - **1.0.0** – erste Version.
@@ -176,7 +181,8 @@ Diese Stolpersteine löst der Installer automatisch:
 | DXVK/Vulkan stürzt in der VM ab | WoW im OpenGL-Modus über virgl, Renderer „Apple Core OpenGL“ |
 | Ton bricht weg (SPICE) | Ton direkt über CoreAudio (`-audiodev coreaudio`) |
 | Maus dreht durch (Tablet-Modus) | UTM fängt die Maus automatisch (relativ) |
-| virtio-gpu verpasst beim Vollbild-Wechsel einen vblank | Start-Skript erkennt das und startet die Oberfläche neu |
+| Grafiktreiber virtio-gpu hängt, wenn `spice-vdagent` die Auflösung umstellt (`flip_done timed out`) | eigenes Skript `wow-resize` liest die von UTM gemeldete Fenstergröße (bevorzugter Modus in `/sys/class/drm/…/modes`) und setzt den Modus selbst; `spice-vdagent` läuft nur noch an einem Platzhalter-Bildschirm (Xvfb), damit UTM das Fenster frei ziehen lässt |
+| Wine gibt dem WoW-Fenster eine feste Größe vor | `wow-resize` setzt die Vorgabe am Fenster zurück, ändert die Größe und kennzeichnet es wieder als Vollbildfenster (xprop, xdotool, wmctrl) – ohne Eingriff ins Spiel |
 | Sperrbildschirm in der VM | entfernt (der VM-Benutzer hat kein Passwort) |
 
 Aufbau des Repos:
@@ -185,7 +191,7 @@ Aufbau des Repos:
 install.sh                    Einstieg per Terminal-Zeile
 installer/wowmac.sh           eigentlicher Installer (install, repair, uninstall, status, selftest)
 installer/lib/                gemeinsame Funktionen, qcow2-Vergrößerung ohne qemu-img, Symbolzeichnung (JXA)
-installer/guest/              läuft in der VM: cloud-init-Vorlage, Einrichtung, Start-Skripte
+installer/guest/              läuft in der VM: cloud-init-Vorlage, Einrichtung, Start-Skripte, wow-resize (Fenstergröße)
 installer/apps/               AppleScript-Vorlagen für Installer, Start-App, Deinstallation
 ```
 

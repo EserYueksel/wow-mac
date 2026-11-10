@@ -1,7 +1,7 @@
 #!/bin/bash
 # common.sh – gemeinsame Werte und Hilfsfunktionen des WoW-Mac-Installers (macOS, /bin/bash 3.2).
 
-WOWMAC_VERSION="1.1.1"
+WOWMAC_VERSION="1.2.0"
 
 # ---- feste, getestete Versionen (Prüfsummen von den offiziellen Release-Seiten) ----
 UTM_MIN_VERSION="5.0.0"

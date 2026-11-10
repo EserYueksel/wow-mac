@@ -2,9 +2,9 @@
 # wow-launch [WARTEZEIT] [SKALIERUNG] – wird vom Mac-Starter über den UTM-Gastagenten aufgerufen (läuft als root):
 # wartet auf die grafische Sitzung des Spieler-Benutzers und startet darin wow-start.
 # SKALIERUNG 0.5 = Leistungsmodus (WoW rechnet intern mit halber Auflösung), 1 oder leer = normal.
-# Bekannter Fehler: Beim Wechsel ins UTM-Vollbild verpasst virtio-gpu manchmal einen vblank
-# ("vblank wait timed out"); danach hängen neu gestartete OpenGL-Programme. Dann wird die
-# Oberfläche (lightdm) vor dem Start einmal neu gestartet.
+# Sicherheitsnetz: Hängt der Grafiktreiber virtio-gpu dauerhaft ("flip_done timed out"), hängen auch neu
+# gestartete OpenGL-Programme. Dann wird die Oberfläche (lightdm) vor dem Start einmal neu gestartet.
+# (Ein einzelnes "vblank wait timed out" beim Größenwechsel ist harmlos.)
 [ -f /etc/wow-mac.conf ] && . /etc/wow-mac.conf
 U="${WOW_USER:-wow}"
 ID=$(id -u "$U") || exit 1
@@ -25,8 +25,8 @@ if pgrep -f 'C:\\WoW\\Wow.exe' >/dev/null; then echo "WoW läuft bereits"; exit 
 wait_x || { echo "Keine grafische Sitzung"; exit 1; }
 sleep "${1:-2}"      # kurz warten, bis das UTM-Vollbild die Aufloesung gesetzt hat
 XSTART=$(stat -c %Y /tmp/.X11-unix/X0 2>/dev/null || echo 0)
-if journalctl -k --since "@$XSTART" 2>/dev/null | grep -q "vblank wait timed out"; then
-  echo "vblank-Fehler seit X-Start erkannt -> Oberfläche wird neu gestartet"
+if journalctl -k --since "@$XSTART" 2>/dev/null | grep -q "flip_done timed out"; then
+  echo "Grafik-Hänger seit X-Start erkannt -> Oberfläche wird neu gestartet"
   systemctl restart lightdm
   sleep 3; wait_x; sleep 6
 fi

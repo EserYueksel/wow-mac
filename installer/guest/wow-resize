@@ -1,0 +1,109 @@
+#!/bin/bash
+# wow-resize – passt die Auflösung der Linux-VM an die Größe des UTM-Fensters an.
+# Läuft in der grafischen Sitzung des Spieler-Benutzers (Autostart) und ersetzt die Bildschirmfunktion
+# von spice-vdagent: Dessen Auflösungswechsel ließ den Grafiktreiber virtio-gpu hängen
+# ("vblank wait timed out" / "flip_done timed out"), sobald das UTM-Fenster gezogen wurde.
+#
+# So geht es stattdessen:
+#  - UTM meldet die Fenstergröße an QEMU; die VM sieht sie als bevorzugten Modus des Bildschirms
+#    (/sys/class/drm/card*-<Ausgang>/modes, erste Zeile).
+#  - Dieses Skript wartet, bis die Größe stabil ist, und setzt dann selbst einen passenden Modus (xrandr).
+#  - Damit UTM das Fenster frei ziehen lässt, muss ein SPICE-Agent verbunden sein. Dafür läuft ein
+#    spice-vdagent an einem unsichtbaren Platzhalter-Bildschirm (Xvfb :9); er ändert am echten Bild nichts.
+#  - Leistungsmodus: wow-start legt $XDG_RUNTIME_DIR/wow-scale an ("FAKTOR BREITExHÖHE"). Meldet UTM genau
+#    diese Größe (Vollbild), wird sie mit dem Faktor verkleinert; UTM vergrößert das Bild im Vollbild selbst.
+RT="${XDG_RUNTIME_DIR:-/tmp}"
+exec 9>"$RT/wow-resize.lock"; flock -n 9 || exit 0          # nur einmal pro Sitzung
+O=""; for i in $(seq 1 30); do O=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}'); [ -n "$O" ] && break; sleep 1; done
+[ -n "$O" ] || exit 1
+S=$(ls -d /sys/class/drm/card*-"$O" 2>/dev/null | head -1)
+[ -r "$S/modes" ] || exit 1
+ME=$(id -u)
+
+agent() {   # Platzhalter-Bildschirm und SPICE-Agent (neu) starten, falls sie nicht laufen
+  command -v Xvfb >/dev/null && command -v spice-vdagent >/dev/null || return 0
+  if ! pgrep -u "$ME" -f '^Xvfb :9 ' >/dev/null; then
+    pkill -u "$ME" -x spice-vdagent 2>/dev/null
+    Xvfb :9 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 9>&- &
+    sleep 1
+  fi
+  pgrep -u "$ME" -x spice-vdagent >/dev/null || DISPLAY=:9 spice-vdagent -x >/dev/null 2>&1 9>&- &
+}
+cursize() { xrandr 2>/dev/null | grep -o 'current [0-9]* x [0-9]*' | awk '{print $2"x"$4}'; }
+setmode() { # BREITE HÖHE – eigenen Modus anlegen und einschalten, den vorherigen eigenen Modus entfernen
+  local w=$1 h=$2 n="wow_${1}x${2}" ht vt clk old
+  [ "$(cursize)" = "${w}x${h}" ] && return 0
+  if ! xrandr | grep -q "^ *$n "; then
+    ht=$((w+160)); vt=$((h+30)); clk=$(awk -v a=$ht -v b=$vt 'BEGIN{printf "%.2f", a*b*60/1000000}')
+    xrandr --newmode "$n" "$clk" "$w" $((w+48)) $((w+80)) "$ht" "$h" $((h+3)) $((h+8)) "$vt" -hsync +vsync 2>/dev/null
+    xrandr --addmode "$O" "$n" 2>/dev/null
+  fi
+  timeout 30 xrandr --output "$O" --mode "$n" || return 1
+  for old in $(xrandr | awk '$1 ~ /^wow_[0-9]+x[0-9]+$/ {print $1}'); do
+    [ "$old" = "$n" ] || { xrandr --delmode "$O" "$old" 2>/dev/null; xrandr --rmmode "$old" 2>/dev/null; }
+  done
+}
+wowids() { # Fenster-IDs von WoW; direkt nach einem Moduswechsel antwortet die Suche manchmal erst beim zweiten Mal
+  command -v xdotool >/dev/null || return 0
+  pgrep -f 'C:\\WoW\\Wow.exe' >/dev/null || return 0
+  local r t
+  for t in 1 2 3 4 5 6; do
+    r=$(xdotool search --name '^World of Warcraft$' 2>/dev/null); [ -n "$r" ] && { echo "$r"; return 0; }
+    sleep 0.4
+  done
+}
+fitwow() { # WoW-Fenster auf die neue Bildschirmgröße bringen (nach dem Moduswechsel).
+  # 1. Vollbild-Kennzeichen abnehmen: solange es gesetzt ist, meldet Wine dem Spiel keine neue Größe.
+  # 2. Wine gibt dem Fenster eine feste Größe vor (Mindest- = Höchstgröße) und schreibt sie nach jeder
+  #    Änderung neu: Vorgabe zurücksetzen und Größe setzen, bis sie stimmt. Das Spiel zeichnet dann in der neuen Größe.
+  # 3. Wieder als Vollbildfenster kennzeichnen, sonst hält der Fenstermanager es unterhalb der Leiste.
+  command -v xdotool >/dev/null && command -v xprop >/dev/null || return 0
+  local id cs t; cs=$(cursize); [ -n "$cs" ] || return 0
+  geo() { xdotool getwindowgeometry "$1" 2>/dev/null | awk '/Geometry/{print $2}'; }
+  for id in $(wowids); do
+    if command -v wmctrl >/dev/null; then
+      wmctrl -i -r "$id" -b remove,fullscreen 2>/dev/null
+      for t in 1 2 3 4 5 6 7 8 9 10; do     # warten, bis der Fenstermanager das Kennzeichen wirklich abgenommen hat
+        xprop -id "$id" _NET_WM_STATE 2>/dev/null | grep -q FULLSCREEN || break; sleep 0.3
+      done
+      sleep 0.3
+    fi
+    if [ "$(geo "$id")" != "$cs" ]; then
+      for t in 1 2 3 4 5 6 7 8 9 10; do
+        xprop -id "$id" -f WM_NORMAL_HINTS 32i -set WM_NORMAL_HINTS "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0" 2>/dev/null
+        xdotool windowsize "$id" "${cs%x*}" "${cs#*x}" 2>/dev/null
+        sleep 0.4
+        [ "$(geo "$id")" = "$cs" ] && break
+      done
+      for t in 1 2 3 4 5 6 7 8 9 10; do     # Wine hat die neue Größe verarbeitet, sobald es seine Vorgabe neu geschrieben hat
+        xprop -id "$id" WM_NORMAL_HINTS 2>/dev/null | grep -q "minimum size: ${cs%x*} by ${cs#*x}" && break; sleep 0.3
+      done
+    fi
+    if command -v wmctrl >/dev/null; then wmctrl -i -r "$id" -b add,fullscreen 2>/dev/null
+    else xdotool windowmove "$id" 0 0 2>/dev/null; fi
+  done
+}
+apply() { # BREITExHÖHE wie von UTM gemeldet
+  local w=${1%x*} h=${1#*x} sc base
+  case "$w$h" in ''|*[!0-9]*) return 0;; esac
+  [ "$w" -ge 320 ] && [ "$h" -ge 200 ] || return 0
+  if [ -r "$RT/wow-scale" ]; then
+    read -r sc base < "$RT/wow-scale"
+    if [ "$base" = "$1" ] && printf '%s' "$sc" | grep -Eq '^0\.[0-9]{1,2}$'; then
+      w=$(awk -v w="$w" -v s="$sc" 'BEGIN{printf "%d", int(w*s/8)*8}'); h=$(awk -v h="$h" -v s="$sc" 'BEGIN{printf "%d", int(h*s/2)*2}')
+    fi
+  fi
+  [ "$(cursize)" = "${w}x${h}" ] && return 0
+  setmode "$w" "$h" || return 1
+  sleep 0.4; fitwow
+}
+
+agent
+last=$(head -1 "$S/modes" 2>/dev/null); pending=""; n=0
+[ -r "$RT/wow-scale" ] || { [ -n "$last" ] && [ "$last" != "$(cursize)" ] && pending="$last"; }
+while sleep 0.4; do
+  p=$(head -1 "$S/modes" 2>/dev/null); [ -n "$p" ] || continue
+  if [ "$p" != "$last" ]; then last="$p"; pending="$p"; continue; fi      # erst handeln, wenn die Größe zweimal gleich gelesen wurde
+  if [ -n "$pending" ]; then apply "$pending"; pending=""; fi
+  n=$((n+1)); [ $((n % 12)) -eq 0 ] && agent
+done
