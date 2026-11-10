@@ -18,6 +18,14 @@ Mac  ──►  UTM (QEMU, Hypervisor)  ──►  Ubuntu 26.04 (arm64)  ──�
                      └── 3D über virgl → Apple Core OpenGL                     └── Spielordner vom Mac (VirtFS)
 ```
 
+### Warum dieser Weg auch auf Dauer der bessere ist
+
+- **Unabhängig von Rosetta 2.** Apple hat angekündigt, Rosetta 2 ab macOS 28 schrittweise einzustellen; bleiben soll nur ein Teil für ältere Spiele. macOS warnt seit Version 26.4 bereits bei Apps, die Rosetta brauchen. Alle Wege, die WoW direkt unter macOS starten (CrossOver, Whisky, Wine, darauf aufbauende Launcher), hängen an Rosetta. Ob und wie lange sie danach weiterlaufen, ist offen. WoW-Mac benutzt Rosetta an keiner Stelle: Die x86-Übersetzung macht FEX in der Linux-VM, und von Apple wird nur die Virtualisierung gebraucht, auf der UTM aufbaut.
+- **Warden läuft ohne Tricks.** FEX führt `ARPL` so aus, wie es ein echter Prozessor tut. Es wird nichts am Spiel verändert und nichts in den Spielordner kopiert.
+- **Offene Bausteine.** UTM, Ubuntu, Wine/Hangover und FEX sind frei verfügbar und werden weiterentwickelt; der Installer lädt sie von den offiziellen Quellen und prüft die Prüfsummen.
+
+Der Preis dafür: eine VM, die etwa 10–12 GB Platz und einen Teil des Arbeitsspeichers belegt, ein etwas längerer Start und weniger FPS als auf einem Windows-PC (siehe [Leistung](#leistung-gemessen-macbook-air-m4)).
+
 ---
 
 ## Voraussetzungen
