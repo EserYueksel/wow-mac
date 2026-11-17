@@ -4,6 +4,8 @@ Ein Installer, der **World of Warcraft 3.3.5a** (WotLK, Client 12340, getestet a
 
 > **Wichtig:** Die Spieldateien sind **nicht** enthalten. Du brauchst deinen eigenen WoW-3.3.5a-Ordner (mit `Wow.exe` und `Data/`).
 
+> **Linux statt Mac?** Für Linux Mint und Ubuntu auf Intel/AMD-Rechnern gibt es einen eigenen, einfacheren Installer ohne VM: **[Anleitung für Linux](linux/README.md)**.
+
 ---
 
 ## Warum eine Linux-VM?
@@ -153,6 +155,7 @@ Die Zeile aus [Variante A](#variante-a--eine-zeile-im-terminal-empfohlen) erneut
 
 ### Änderungen
 
+- **Linux 1.0.0** – Neuer Ordner `linux/`: Installer für Linux Mint / Ubuntu (Wine + DXVK 2.7.1, Optimus-Unterstützung, Hilfe bei Secure Boot, Prüfung auf unvollständig kopierte Spieldateien) mit Schritt-für-Schritt-Anleitung.
 - **1.2.0** – Das UTM-Fenster lässt sich frei ziehen, auch im laufenden Spiel und in jedem Format; Vollbild an/aus ohne Hänger. Dafür stellt ein eigenes kleines Skript in der VM (`wow-resize`) die Auflösung ein und passt das WoW-Fenster an; die Bildschirmfunktion von `spice-vdagent`, die den Grafiktreiber hängen ließ, ist abgeschaltet. Die Start-App wartet nach einem Kaltstart von UTM, bis die VM bekannt ist (keine Fehlermeldung mehr beim ersten Klick). Bestehende Installationen: „Reparieren“.
 - **1.1.1** – Tastenwächter in der VM: Nach dem Freigeben der Maus mit Ctrl + Option blieben Ctrl/Alt in der VM hängen (M schaltete die Musik aus, S den Ton, D minimierte WoW). Der Wächter löst hängende Sondertasten selbst; zusätzlich sind die Tastenkürzel der VM-Oberfläche (Xfce) abgeschaltet. Für ältere Installationen: `tools/tasten-fix.sh`.
 - **1.1.0** – Leistungsmodus als zweite Start-App („… Leistung“, grüner Blitz). Start-App-Symbole unter macOS 26+ repariert (macOS legte sein Standardsymbol darüber) und auf eine Kachel im macOS-Raster gesetzt. „Reparieren“ aktualisiert jetzt auch die Startskripte in der VM und die Start-Apps und prüft vorher, ob WoW läuft. Selbsttest `wowmac.sh selftest` (läuft auch bei jedem Push auf GitHub).
@@ -201,6 +204,7 @@ installer/wowmac.sh           eigentlicher Installer (install, repair, uninstall
 installer/lib/                gemeinsame Funktionen, qcow2-Vergrößerung ohne qemu-img, Symbolzeichnung (JXA)
 installer/guest/              läuft in der VM: cloud-init-Vorlage, Einrichtung, Start-Skripte, wow-resize (Fenstergröße)
 installer/apps/               AppleScript-Vorlagen für Installer, Start-App, Deinstallation
+linux/                        Installer für Linux Mint / Ubuntu (Wine + DXVK, ohne VM), mit eigener Anleitung
 ```
 
 ## Lizenz und Hinweise
@@ -219,4 +223,10 @@ WoW-Mac makes **World of Warcraft 3.3.5a** playable on Apple Silicon Macs withou
 curl -fsSL https://raw.githubusercontent.com/EserYueksel/wow-mac/main/install.sh | bash
 ```
 
-You need your own WoW 3.3.5a folder; no game files are included. Uninstall with the bundled “WoW-Mac deinstallieren” app – your game folder is never modified (apart from graphics keys in `WTF/Config.wtf`, which are backed up first).
+**Linux (Mint 22 / Ubuntu 24.04, x86-64):** a separate, simpler installer (Wine + DXVK 2.7.1, no VM) is in [`linux/`](linux/README.md):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EserYueksel/wow-mac/main/linux/install.sh | bash -s -- ~/Documents/WoW_3.3.5a
+```
+
+You need your own WoW 3.3.5a folder; no game files are included. On the Mac, uninstall with the bundled “WoW-Mac deinstallieren” app – your game folder is never modified (apart from graphics keys in `WTF/Config.wtf`, which are backed up first).

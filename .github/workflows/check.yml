@@ -18,3 +18,23 @@ jobs:
           name: testsymbol
           path: ${{ runner.temp }}/symbole
           if-no-files-found: ignore
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux-Installer mit einem Attrappen-Spielordner durchlaufen lassen
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb
+          G="$HOME/Documents/WoW_Test"; mkdir -p "$G/Data" "$G/WTF" "$HOME/Desktop"
+          printf 'MZ' > "$G/Wow.exe"
+          for m in common.MPQ:2884765590 common-2.MPQ:1814307386 expansion.MPQ:1923425368 lichking.MPQ:2581185567; do truncate -s "${m##*:}" "$G/Data/${m%%:*}"; done
+          printf 'SET gxApi "opengl"\n' > "$G/WTF/Config.wtf"
+          XDG_SESSION_TYPE=x11 xvfb-run -a -s '-screen 0 1920x1080x24' bash linux/install.sh "$G" | tee install.out
+          grep -q '== Fertig ==' install.out
+          grep -q '^SET gxApi "d3d9"' "$G/WTF/Config.wtf"
+          test -s "$HOME/.wine-wow/drive_c/windows/system32/d3d9.dll"
+          test -x "$HOME/bin/wow-starten.sh"
+          test -f "$HOME/.local/share/applications/wow-335a.desktop"
+          bash linux/uninstall.sh < /dev/null
+          test ! -e "$HOME/bin/wow-starten.sh"
+          test -f "$G/Wow.exe"
