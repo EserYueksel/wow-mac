@@ -5,7 +5,7 @@ Diese Anleitung macht **World of Warcraft 3.3.5a** (Wrath of the Lich King) auf 
 Auf Linux geht das ohne Umweg: Der Prozessor ist x86 wie bei Windows, Wine führt `Wow.exe` direkt aus. Den Absturz #132 nach dem Login, den es auf Macs mit Apple-Chip gibt, gibt es hier nicht. (Für Macs: siehe [README im Hauptordner](../README.md).)
 
 **Getestet** mit Linux Mint 22.3 (Cinnamon, X11) auf
-- Lenovo IdeaPad mit Intel Iris Xe + NVIDIA GeForce MX450 (Optimus, Treiber 595, Secure Boot an) – läuft
+- Lenovo IdeaPad mit Intel Iris Xe + NVIDIA GeForce MX450 (Optimus, Treiber 595, Secure Boot an) – Dalaran 93–124 FPS bei 1920×1080
 - Razer Blade 15 mit Intel UHD + NVIDIA RTX 3070 Laptop (Optimus) – offene Welt ca. 98 FPS, Dalaran 84–110 FPS bei 2560×1440
 
 Mit AMD- oder reiner Intel-Grafik sollte es ebenso gehen (Mesa-Treiber), das ist aber noch nicht auf echter Hardware getestet.
