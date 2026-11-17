@@ -4,7 +4,7 @@ Ein Installer, der **World of Warcraft 3.3.5a** (WotLK, Client 12340, getestet a
 
 > **Wichtig:** Die Spieldateien sind **nicht** enthalten. Du brauchst deinen eigenen WoW-3.3.5a-Ordner (mit `Wow.exe` und `Data/`).
 
-> **Linux statt Mac?** Für Linux Mint und Ubuntu auf Intel/AMD-Rechnern gibt es einen eigenen, einfacheren Installer ohne VM: **[Anleitung für Linux](linux/README.md)**.
+> **Linux statt Mac?** Für Linux Mint und Ubuntu auf Intel/AMD-Rechnern gibt es einen eigenen, einfacheren Installer ohne VM: **[Anleitung für Linux](linux/README.md)**, auch als [ausführliche PDF](linux/WoW-auf-Linux-Mint-Anleitung.pdf).
 
 ---
 
